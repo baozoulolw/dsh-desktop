@@ -1,0 +1,64 @@
+name: Build & Package
+
+# 触发方式：
+#  - 手动：仓库 Actions 页点 "Run workflow"
+#  - 打了 v* 标签（如 v0.1.0）自动触发
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        # 每个平台独立打包：机器会自动安装对应平台的 koffi/sharp/ripgrep 原生二进制
+        include:
+          - os: macos-latest      # arm64 Apple Silicon
+            name: mac-arm64
+            command: build:mac
+          - os: macos-13          # x64 Intel
+            name: mac-x64
+            command: build:mac
+          - os: ubuntu-latest     # x64
+            name: linux-x64
+            command: build:linux
+          - os: windows-latest    # x64
+            name: win-x64
+            command: build:win
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Package ${{ matrix.name }}
+        run: pnpm ${{ matrix.command }}
+        env:
+          # 无签名证书时跳过 codesign，避免 CI 卡在签名步骤
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb
+          if-no-files-found: warn

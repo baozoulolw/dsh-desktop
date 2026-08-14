@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'" />
+  <title>DeepSeek Harness</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; }
+
+    body { display: flex; flex-direction: column; background: #1e1e1e; }
+
+    /* 顶部标题栏：macOS 原生无边框下，左侧让位给红黄绿按钮 */
+    header {
+      height: 38px;
+      flex: 0 0 38px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px 0 78px; /* 左侧为原生 traffic lights 留位 */
+      background: #1e1e1e;
+      color: #d0d0d0;
+      -webkit-app-region: drag; /* 整条可拖拽窗口 */
+      user-select: none;
+      -webkit-user-select: none;
+      gap: 8px;
+    }
+    header .brand { font-size: 13px; font-weight: 600; letter-spacing: .3px; }
+    header .badge {
+      font-size: 11px; color: #9cdcfe; background: rgba(156,220,254,.12);
+      border: 1px solid rgba(156,220,254,.25); padding: 1px 7px; border-radius: 10px;
+    }
+    header .spacer { flex: 1; }
+
+    .win-btn {
+      -webkit-app-region: no-drag;
+      border: none; background: transparent; color: #b0b0b0;
+      width: 30px; height: 26px; border-radius: 5px; cursor: pointer; font-size: 13px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .win-btn:hover { background: rgba(255,255,255,.12); color: #fff; }
+    .win-btn.close:hover { background: #e81123; color: #fff; }
+
+    button.action {
+      -webkit-app-region: no-drag;
+      border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08);
+      color: #d0d0d0; font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
+    }
+    button.action:hover { background: rgba(255,255,255,.16); }
+    button.action:disabled { opacity: .4; cursor: not-allowed; }
+    button.action.primary { background: #0078d4; border-color: #0078d4; color: #fff; }
+    button.action.primary:hover { background: #1a86d9; }
+
+    /* 更新提示按钮：有新版时显示，带红点 */
+    #updateBtn {
+      display: none;
+      position: relative;
+      background: #e81123; border-color: #e81123; color: #fff; font-weight: 600;
+    }
+    #updateBtn:hover { background: #f03040; }
+
+    /* webview 铺满剩余空间 */
+    webview {
+      flex: 1;
+      border: none;
+    }
+
+    /* 版本/升级下拉面板 */
+    .panel {
+      position: fixed; top: 44px; right: 12px; width: 320px;
+      background: #252526; border: 1px solid #3c3c3c; border-radius: 8px;
+      box-shadow: 0 8px 28px rgba(0,0,0,.45); padding: 14px; z-index: 100;
+      display: none; color: #d0d0d0; font-size: 12px;
+    }
+    .panel.open { display: block; }
+    .panel h3 { font-size: 13px; margin-bottom: 10px; color: #fff; }
+    .panel .row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #333; }
+    .panel .row:last-of-type { border-bottom: none; }
+    .panel .row .k { color: #9a9a9a; }
+    .panel .row .v { font-weight: 500; color: #e0e0e0; }
+    .panel .actions { margin-top: 12px; display: flex; gap: 8px; }
+    .panel .progress { margin-top: 10px; max-height: 90px; overflow: auto; font: 11px/1.5 ui-monospace, monospace; color: #9cdcfe; white-space: pre-wrap; }
+    .panel .hint { margin-top: 8px; color: #7c7c7c; font-size: 11px; }
+    /* 检查更新状态提示：含 loading 转圈 */
+    .status { margin-top: 10px; font-size: 12px; display: flex; align-items: center; gap: 7px; min-height: 16px; }
+    .status:empty { display: none; }
+    .status.loading::before {
+      content: ''; width: 12px; height: 12px; flex: 0 0 12px;
+      border: 2px solid rgba(255,255,255,.2); border-top-color: #9cdcfe;
+      border-radius: 50%; animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg) } }
+    .status.success { color: #7fe0a0; }
+    .status.error { color: #ff6b6b; }
+  </style>
+</head>
+<body>
+  <header id="titlebar">
+    <span class="brand">DeepSeek Harness</span>
+    <span class="badge" id="dshBadge">dsh …</span>
+    <span class="spacer"></span>
+    <button class="action" id="updateBtn" title="有可用更新">更新</button>
+    <button class="action" id="versionBtn">版本</button>
+  </header>
+
+  <webview id="dsh" src="about:blank"></webview>
+
+  <div class="panel" id="panel">
+    <h3>关于 / 升级</h3>
+    <div class="row"><span class="k">应用版本</span><span class="v" id="pAppVer">—</span></div>
+    <div class="row"><span class="k">Electron</span><span class="v" id="pEleVer">—</span></div>
+    <div class="row"><span class="k">dsh 当前版</span><span class="v" id="pCurVer">—</span></div>
+    <div class="row"><span class="k">dsh 最新版</span><span class="v" id="pLatestVer">—</span></div>
+    <div class="actions">
+      <button class="action" id="pRefreshBtn">检查更新</button>
+      <button class="action primary" id="pUpgradeBtn" disabled>升级 dsh</button>
+    </div>
+    <div class="status" id="pStatus"></div>
+    <div class="progress" id="pProgress" style="display:none"></div>
+    <div class="hint">升级会在本目录执行 <code>pnpm install</code> 更新 dsh 包，完成后自动重启。</div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
