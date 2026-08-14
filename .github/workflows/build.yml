@@ -53,6 +53,14 @@ jobs:
           # electron-builder 发布到 GitHub Releases 及下载打包工具都需要 GitHub token
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # electron-builder 默认把 release 创建为 draft(草稿),需转正式才对公众可见。
+      # 打 tag 时把所有平台产物上传完后,把 release 从草稿转正式。
+      - name: Publish release (转正式)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
