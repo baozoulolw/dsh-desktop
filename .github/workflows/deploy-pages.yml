@@ -1,0 +1,42 @@
+name: Deploy Website to GitHub Pages
+
+# 官网自动部署：push 到 main 时，把 docs/ 目录发布为 GitHub Pages 官网
+# 使用方法：仓库 Settings → Pages → Source 选择 "GitHub Actions" 即可
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 允许一次只部署一个（避免并发冲突）
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # 官网静态文件位于 docs/ 目录
+          path: docs
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
