@@ -137,6 +137,42 @@ function fetchLatestDshVersion() {
   })
 }
 
+/** 用系统 node 的 fetch 查 GitHub API 拿应用（DeepSeek Harness）最新 Release。 */
+function fetchLatestAppVersion() {
+  return new Promise((resolve, reject) => {
+    const script =
+      "fetch('https://api.github.com/repos/baozoulolw/dsh-desktop/releases/latest'," +
+      "{headers:{'Accept':'application/vnd.github+json'}})" +
+      ".then(r=>r.json()).then(d=>process.stdout.write(JSON.stringify({tag:d.tag_name,url:d.html_url})))" +
+      ".catch(e=>{process.stderr.write(String(e));process.exit(1)})"
+    const p = spawn(resolveNodeBin(), ['-e', script], { env: { ...process.env } })
+    let out = ''
+    const timer = setTimeout(() => {
+      // 网络超时保护：避免查询永久卡住
+      try { p.kill('SIGKILL') } catch { /* 忽略 */ }
+      reject(new Error('查询超时（网络异常）'))
+    }, 10_000)
+    p.stdout.on('data', (c) => (out += c.toString()))
+    p.on('error', (err) => { clearTimeout(timer); reject(err) })
+    p.on('exit', (code) => {
+      clearTimeout(timer)
+      if (code === 0 && out.trim()) {
+        try { resolve(JSON.parse(out)) } catch { reject(new Error('解析最新版本失败')) }
+      } else reject(new Error('查询最新版本失败'))
+    })
+  })
+}
+
+/** 轻量语义化版本比较：a > b 返回 true。忽略 v/V 前缀，按 major.minor.patch 逐段比较。 */
+function semverGt(a, b) {
+  const toNums = (s) => (s || '').replace(/^[vV]/, '').split('.').slice(0, 3).map((n) => Number(n) || 0)
+  const pa = toNums(a), pb = toNums(b)
+  for (let i = 0; i < 3; i++) {
+    if (pa[i] !== pb[i]) return pa[i] > pb[i]
+  }
+  return false
+}
+
 /** 在项目目录用包管理器升级 dsh 到指定版本，流式回调进度。 */
 function upgradeDsh(targetVersion, onProgress) {
   return new Promise((resolve, reject) => {
@@ -173,6 +209,23 @@ function registerIpc() {
     const current = readDshVersion()
     const latest = await fetchLatestDshVersion()
     return { current, latest, isOutdated: latest !== '未知' && latest !== current }
+  })
+
+  // 检查应用（DeepSeek Harness 本体）自身是否有新版本
+  ipcMain.handle('check-app-update', async () => {
+    const current = app.getVersion()
+    try {
+      const { tag, url } = await fetchLatestAppVersion()
+      const latest = (tag || '').replace(/^[vV]/, '')
+      return { current, latest, isOutdated: latest !== '' && semverGt(latest, current), url }
+    } catch (err) {
+      return { ok: false, error: err.message }
+    }
+  })
+
+  // 打开最新版下载页（GitHub Releases）
+  ipcMain.handle('open-app-release', async (_e, url) => {
+    if (url) shell.openExternal(url)
   })
 
   ipcMain.handle('upgrade-dsh', async (_e, targetVersion) => {

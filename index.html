@@ -58,6 +58,14 @@
     }
     #updateBtn:hover { background: #f03040; }
 
+    /* 版本按钮上的"应用有新版本"小红点 */
+    #versionBtn { position: relative; }
+    #appUpdateDot {
+      position: absolute; top: 1px; right: 1px; width: 8px; height: 8px;
+      background: #e81123; border: 1px solid #1e1e1e; border-radius: 50%;
+      display: none;
+    }
+
     /* webview 铺满剩余空间 */
     webview {
       flex: 1;
@@ -78,6 +86,7 @@
     .panel .row .k { color: #9a9a9a; }
     .panel .row .v { font-weight: 500; color: #e0e0e0; }
     .panel .actions { margin-top: 12px; display: flex; gap: 8px; }
+    .panel .section-divider { height: 1px; background: #333; margin: 12px 0 4px; }
     .panel .progress { margin-top: 10px; max-height: 90px; overflow: auto; font: 11px/1.5 ui-monospace, monospace; color: #9cdcfe; white-space: pre-wrap; }
     .panel .hint { margin-top: 8px; color: #7c7c7c; font-size: 11px; }
     /* 检查更新状态提示：含 loading 转圈 */
@@ -99,14 +108,21 @@
     <span class="badge" id="dshBadge">dsh …</span>
     <span class="spacer"></span>
     <button class="action" id="updateBtn" title="有可用更新">更新</button>
-    <button class="action" id="versionBtn">版本</button>
+    <button class="action" id="versionBtn">版本<span id="appUpdateDot"></span></button>
   </header>
 
   <webview id="dsh" src="about:blank"></webview>
 
   <div class="panel" id="panel">
     <h3>关于 / 升级</h3>
+    <!-- 应用（DeepSeek Harness 本体）信息与更新 -->
     <div class="row"><span class="k">应用版本</span><span class="v" id="pAppVer">—</span></div>
+    <div class="row"><span class="k">应用最新</span><span class="v" id="pAppLatest">—</span></div>
+    <div class="actions">
+      <button class="action primary" id="pAppDownloadBtn" style="display:none">前往下载</button>
+    </div>
+    <div class="section-divider"></div>
+    <!-- dsh 引擎信息与升级 -->
     <div class="row"><span class="k">Electron</span><span class="v" id="pEleVer">—</span></div>
     <div class="row"><span class="k">dsh 当前版</span><span class="v" id="pCurVer">—</span></div>
     <div class="row"><span class="k">dsh 最新版</span><span class="v" id="pLatestVer">—</span></div>

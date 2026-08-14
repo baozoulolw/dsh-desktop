@@ -27,6 +27,31 @@ async function autoCheckUpdate() {
 }
 autoCheckUpdate()
 
+// ---------- 应用自身更新检测（DeepSeek Harness 本体，仅提示 + 跳转下载） ----------
+let appLatestUrl = '' // 最新版下载页地址
+const appDownloadBtn = $('pAppDownloadBtn')
+const appUpdateDot = $('appUpdateDot')
+
+async function checkAppUpdate() {
+  try {
+    const info = await api.checkAppUpdate()
+    if (info.ok === false) throw new Error(info.error)
+    $('pAppLatest').textContent = info.latest || '—'
+    appLatestUrl = info.url || ''
+    const hasNew = !!info.isOutdated
+    appDownloadBtn.style.display = hasNew ? 'inline-flex' : 'none'
+    appUpdateDot.style.display = hasNew ? 'block' : 'none'
+  } catch {
+    // 失败静默：不打扰，面板里显示"查询失败"
+    $('pAppLatest').textContent = '查询失败'
+  }
+}
+appDownloadBtn.addEventListener('click', () => {
+  if (appLatestUrl) api.openAppRelease(appLatestUrl)
+})
+// 启动时后台自动检查一次
+checkAppUpdate()
+
 updateBtn.addEventListener('click', () => {
   panel.classList.add('open')
   refreshPanel()
@@ -58,6 +83,8 @@ async function refreshPanel() {
   const status = $('pStatus')
   const refreshBtn = $('pRefreshBtn')
   const upgradeBtn = $('pUpgradeBtn')
+  // 应用自身更新状态独立刷新（不阻塞下方 dsh 检查）
+  checkAppUpdate()
   // 进入 loading 状态
   refreshBtn.disabled = true
   refreshBtn.textContent = '检查中…'
