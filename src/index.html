@@ -62,6 +62,24 @@
       border: none;
       background: #fff;
     }
+    /* 主内容区:承载 iframe 与启动失败提示层 */
+    .stage { flex: 1; position: relative; display: flex; min-height: 0; }
+
+    /* 启动失败/未安装提示层:覆盖在 iframe 区域之上 */
+    .boot-error {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: #1e1e1e; z-index: 50;
+    }
+    .boot-error .err-card { max-width: 480px; text-align: center; padding: 24px; }
+    .boot-error .err-title { font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 10px; }
+    .boot-error .err-msg { font-size: 13px; line-height: 1.7; color: #b0b0b0; margin-bottom: 18px; white-space: pre-wrap; }
+    .boot-error .err-actions { display: flex; gap: 10px; justify-content: center; }
+    /* 安装/升级进度:窗口内滚动日志 */
+    .boot-error .err-progress {
+      margin-top: 16px; max-height: 180px; overflow: auto; text-align: left;
+      font: 11px/1.5 ui-monospace, monospace; color: #9cdcfe; white-space: pre-wrap;
+      background: #252526; border: 1px solid #333; border-radius: 6px; padding: 8px;
+    }
 
     /* 版本/升级下拉面板 */
     .panel {
@@ -102,7 +120,21 @@
     <button class="action" id="versionBtn">版本<span id="appUpdateDot"></span></button>
   </header>
 
-  <iframe id="dsh" src="about:blank"></iframe>
+  <div class="stage" id="stage">
+    <iframe id="dsh" src="about:blank"></iframe>
+    <div class="boot-error" id="bootError" style="display:none">
+      <div class="err-card">
+        <div class="err-title" id="errTitle">启动失败</div>
+        <div class="err-msg" id="errMsg"></div>
+        <div class="err-actions">
+          <button class="action primary" id="errInstallBtn" style="display:none">前往安装 Node.js</button>
+          <button class="action primary" id="errEngInstallBtn" style="display:none">安装引擎</button>
+          <button class="action" id="errRetryBtn">重试</button>
+        </div>
+        <div class="err-progress" id="errProgress" style="display:none"></div>
+      </div>
+    </div>
+  </div>
 
   <div class="panel" id="panel">
     <h3>关于 / 升级</h3>

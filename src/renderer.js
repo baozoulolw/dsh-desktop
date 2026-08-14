@@ -16,6 +16,14 @@ invoke('get_version_info').then((info) => {
   if (!isMac) $('titlebar').style.paddingLeft = '10px'
 }).catch(() => {})
 
+// 刷新徽章为当前安装的引擎版本(安装/升级重载后调用)
+async function refreshBadge() {
+  try {
+    const info = await invoke('get_version_info')
+    $('dshBadge').textContent = `dsh ${info.dsh_version}`
+  } catch {}
+}
+
 // ---------- 启动时自动检查更新,有更新才显示更新按钮 ----------
 const updateBtn = $('updateBtn')
 
@@ -98,14 +106,23 @@ async function refreshPanel() {
     $('pAppVer').textContent = info.app_version
     $('pEleVer').textContent = info.engine_version
     $('pCurVer').textContent = info.dsh_version
+    const notInstalled = info.dsh_version === '未知'
 
     const { latest, is_outdated } = await invoke('check_update')
-    $('pLatestVer').textContent = latest
-    upgradeBtn.disabled = !is_outdated
-    upgradeBtn.textContent = is_outdated ? `升级到 ${latest}` : '升级 dsh'
-    // 结果提示
-    status.className = 'status success'
-    status.textContent = is_outdated ? `发现新版本 ${latest},可升级。` : '已是最新版本。'
+    if (notInstalled) {
+      // 引擎未安装:不显示最新版,也不提示升级
+      $('pLatestVer').textContent = '—'
+      upgradeBtn.disabled = true
+      upgradeBtn.textContent = '升级 dsh'
+      status.className = 'status error'
+      status.textContent = '引擎尚未安装,请先在主界面点击"安装引擎"。'
+    } else {
+      $('pLatestVer').textContent = latest
+      upgradeBtn.disabled = !is_outdated
+      upgradeBtn.textContent = is_outdated ? `升级到 ${latest}` : '升级 dsh'
+      status.className = 'status success'
+      status.textContent = is_outdated ? `发现新版本 ${latest},可升级。` : '已是最新版本。'
+    }
   } catch (err) {
     $('pLatestVer').textContent = '查询失败'
     upgradeBtn.disabled = true
@@ -146,14 +163,98 @@ listen('upgrade-progress', ({ payload }) => {
   }
 })
 
+// ---------- 启动失败提示层 ----------
+const bootError = $('bootError')
+const errTitle = $('errTitle')
+const errMsg = $('errMsg')
+const errInstallBtn = $('errInstallBtn')
+const errEngInstallBtn = $('errEngInstallBtn')
+const errProgress = $('errProgress')
+const errRetryBtn = $('errRetryBtn')
+
+function showBootError({ title, message, offerNode = false, offerEngine = false }) {
+  errTitle.textContent = title
+  errMsg.textContent = message
+  errMsg.style.display = 'block'
+  errProgress.style.display = 'none'
+  errInstallBtn.style.display = offerNode ? 'inline-flex' : 'none'
+  errEngInstallBtn.style.display = offerEngine ? 'inline-flex' : 'none'
+  errEngInstallBtn.disabled = false
+  errRetryBtn.disabled = false
+  bootError.style.display = 'flex'
+}
+function hideBootError() {
+  bootError.style.display = 'none'
+}
+// 引导安装 Node.js(引擎依赖 Node 才能安装与运行)
+errInstallBtn.addEventListener('click', () => {
+  invoke('open_external', { url: 'https://nodejs.org/' })
+})
+// 安装引擎:窗口内实时显示 npm 安装进度,装完自动 boot
+async function installEngine() {
+  errEngInstallBtn.disabled = true
+  errRetryBtn.disabled = true
+  errMsg.style.display = 'none'
+  errProgress.style.display = 'block'
+  errProgress.textContent = ''
+  try {
+    await invoke('install_dsh')
+  } catch (err) {
+    $('dshBadge').textContent = '安装失败'
+    errProgress.textContent += `\n[错误] ${err}`
+    errEngInstallBtn.disabled = false
+    errRetryBtn.disabled = false
+  }
+}
+errEngInstallBtn.addEventListener('click', installEngine)
+// 安装进度(实时回传;done 后自动启动引擎并载入)
+listen('install-progress', ({ payload }) => {
+  errProgress.textContent += (payload.phase || '') + '\n'
+  errProgress.scrollTop = errProgress.scrollHeight
+  if (payload.done) boot()
+})
+// 重试启动
+errRetryBtn.addEventListener('click', () => {
+  boot()
+})
+
 // ---------- 启动 dsh 并载入 iframe ----------
 async function boot() {
+  hideBootError()
   try {
-    const url = await invoke('get_dsh_url')
-    if (iframe.getAttribute('src') !== url) iframe.src = url
+    const res = await invoke('get_dsh_url')
+    if (res.status === 'ready') {
+      if (iframe.getAttribute('src') !== res.url) iframe.src = res.url
+      refreshBadge()
+    } else if (res.status === 'node_missing') {
+      $('dshBadge').textContent = 'dsh 未安装'
+      showBootError({
+        title: '未检测到 Node.js',
+        message: 'dsh 引擎依赖 Node.js 来安装和运行,但当前系统没有检测到 Node.js。\n请先前往 Node.js 官网下载安装,安装后再回本应用点击"安装引擎"。',
+        offerNode: true,
+      })
+    } else if (res.status === 'not_installed') {
+      $('dshBadge').textContent = 'dsh 未安装'
+      showBootError({
+        title: 'dsh 引擎未安装',
+        message: '首次使用需要先安装 dsh 引擎(约几十 MB)。点击下方"安装引擎",安装进度会在窗口内实时显示,完成后自动启动。',
+        offerEngine: true,
+      })
+    } else {
+      $('dshBadge').textContent = 'dsh 启动失败'
+      showBootError({
+        title: 'dsh 启动失败',
+        message: res.message || '未知错误',
+      })
+    }
   } catch (err) {
     $('dshBadge').textContent = 'dsh 启动失败'
     console.error(err)
+    showBootError({
+      title: '启动失败',
+      message: String(err),
+      offerNode: String(err).includes('node') || String(err).includes('Node'),
+    })
   }
 }
 boot()

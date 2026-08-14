@@ -100,6 +100,24 @@ fn resolve_node() -> Result<String, String> {
     Ok("node".to_string()) // 最终回退:依赖 PATH
 }
 
+/// 系统 Node 是否可用。resolve_node 能解析到确定路径时直接判存;回退到 PATH("node")
+/// 时用 `node --version` 实测,避免 PATH 里其实没有 node 却误判可用。
+fn node_available() -> bool {
+    let Ok(node) = resolve_node() else {
+        return false;
+    };
+    if node == "node" {
+        return Command::new("node")
+            .arg("--version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+    }
+    Path::new(&node).exists()
+}
+
 /// 取 node 同目录的 npm 可执行文件(npm 随 node 一起分发)。
 fn resolve_npm(node: &str) -> String {
     if let Some(dir) = Path::new(node).parent() {
@@ -142,50 +160,28 @@ fn semver_gt(a: &str, b: &str) -> bool {
 
 // ---------- dsh 引擎安装与启动 ----------
 
-/// 确保 runtime 目录已装好 dsh:缺失则用系统 npm 装默认版本。
-async fn ensure_runtime(runtime: &Path) -> Result<(), String> {
-    let dsh_dir = runtime.join("node_modules").join("@deepseek-ai").join("dsh");
-    if dsh_dir.exists() {
-        return Ok(());
-    }
-    std::fs::create_dir_all(runtime).map_err(|e| format!("创建 runtime 目录失败: {e}"))?;
-    let pkg = runtime.join("package.json");
-    if !pkg.exists() {
-        std::fs::write(&pkg, "{\"private\":true}").map_err(|e| format!("写 package.json 失败: {e}"))?;
-    }
-    let node = resolve_node()?;
-    let npm = resolve_npm(&node);
-    let status = Command::new(&npm)
-        .arg("install")
-        .arg("--prefix")
-        .arg(runtime)
-        .arg(format!("@deepseek-ai/dsh@{DEFAULT_DSH_VERSION}"))
-        .current_dir(runtime)
-        .stdin(Stdio::null())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .map_err(|e| format!("启动 npm install 失败: {e}"))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("npm install 失败 (exit = {status})"))
-    }
+/// dsh 引擎可执行文件路径。
+fn dsh_bin_path(runtime: &Path) -> PathBuf {
+    runtime.join("node_modules").join("@deepseek-ai").join("dsh").join("lib").join("bin.js")
+}
+
+/// 引擎是否已安装(runtime 目录里存在 bin.js)。
+fn dsh_installed(runtime: &Path) -> bool {
+    dsh_bin_path(runtime).exists()
 }
 
 /// 真正拉起 dsh 子进程并等其打印 URL。
-/// 阻塞至拿到 URL(由调用方负责包一层,避免卡 UI)。
+/// 阻塞至拿到 URL(由调用方负责包一层,避免卡 UI)。调用前需确保引擎已安装。
 async fn start_dsh_inner(app: &tauri::AppHandle, state: &State<'_, DshState>) -> Result<String, String> {
     // 先终止可能残留的旧进程
     if let Some(mut old) = state.child.lock().unwrap().take() {
         let _ = old.kill();
     }
     let runtime = runtime_dir(app)?;
-    ensure_runtime(&runtime).await?;
     let node = resolve_node()?;
-    let dsh_bin = runtime.join("node_modules").join("@deepseek-ai").join("dsh").join("lib").join("bin.js");
+    let dsh_bin = dsh_bin_path(&runtime);
     if !dsh_bin.exists() {
-        return Err(format!("dsh 未安装: {dsh_bin:?}"));
+        return Err("dsh 未安装".to_string());
     }
 
     let mut child = Command::new(&node)
@@ -270,10 +266,29 @@ struct AppUpdateInfo {
     error: Option<String>,
 }
 
+/// 启动 dsh 的结果:成功返回地址;失败则区分原因,供前端给出针对性提示。
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case", tag = "status")]
+enum DshStartup {
+    Ready { url: String },
+    /// 系统缺少 Node.js,无法安装/运行 dsh 引擎。
+    NodeMissing,
+    /// 引擎尚未安装,需要先点"安装"。
+    NotInstalled,
+    /// dsh 已启动但未在时限内就绪(超时/进程退出)。
+    StartupFailed { message: String },
+}
+
 /// 前端启动时调用:确保引擎已就绪并拿到地址,返回 dsh web URL。
-/// 若已在运行则直接返回缓存 URL,否则拉起来。
+/// 已有则直接返回缓存 URL;未安装则告知前端"需要先安装",由用户触发安装,不再自动装。
 #[tauri::command]
-async fn get_dsh_url(app: tauri::AppHandle, state: State<'_, DshState>) -> Result<String, String> {
+async fn get_dsh_url(app: tauri::AppHandle, state: State<'_, DshState>) -> Result<DshStartup, String> {
+    if !node_available() {
+        return Ok(DshStartup::NodeMissing);
+    }
+    if !dsh_installed(&runtime_dir(&app)?) {
+        return Ok(DshStartup::NotInstalled);
+    }
     let running = {
         let mut g = state.child.lock().unwrap();
         match g.as_mut() {
@@ -283,10 +298,13 @@ async fn get_dsh_url(app: tauri::AppHandle, state: State<'_, DshState>) -> Resul
     };
     if running {
         if let Some(u) = state.url.lock().unwrap().clone() {
-            return Ok(u);
+            return Ok(DshStartup::Ready { url: u });
         }
     }
-    start_dsh_inner(&app, &state).await
+    match start_dsh_inner(&app, &state).await {
+        Ok(url) => Ok(DshStartup::Ready { url }),
+        Err(message) => Ok(DshStartup::StartupFailed { message }),
+    }
 }
 
 #[tauri::command]
@@ -322,7 +340,8 @@ async fn check_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
         .and_then(|l| l.as_str())
         .unwrap_or("未知")
         .to_string();
-    let is_outdated = latest != "未知" && latest != current;
+    // 引擎未安装(current=="未知")时不算"过时",避免顶栏误显示"升级到 X"。
+    let is_outdated = current != "未知" && latest != "未知" && latest != current;
     Ok(UpdateInfo {
         current,
         latest,
@@ -425,6 +444,7 @@ async fn upgrade_dsh(
         .arg("--prefix")
         .arg(&runtime)
         .arg(format!("@deepseek-ai/dsh@{target_version}"))
+        .arg("--loglevel=info") // 非终端下默认只打警告;降到 info 让下载/安装过程可见
         .current_dir(&runtime)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -465,6 +485,66 @@ async fn upgrade_dsh(
     })
 }
 
+/// 手动安装 dsh 引擎:在 runtime 目录 npm install 默认版本,实时回传进度,完成后不重启,
+/// 由前端收到 done 事件后重新调用 boot 拉起引擎。
+#[tauri::command]
+async fn install_dsh(app: tauri::AppHandle) -> Result<VersionInfo, String> {
+    if !node_available() {
+        return Err("未检测到 Node.js,无法安装 dsh 引擎。请先前往 nodejs.org 安装 Node.js。".to_string());
+    }
+    let runtime = runtime_dir(&app)?;
+    std::fs::create_dir_all(&runtime).map_err(|e| format!("创建 runtime 目录失败: {e}"))?;
+    let pkg = runtime.join("package.json");
+    if !pkg.exists() {
+        std::fs::write(&pkg, "{\"private\":true}").map_err(|e| format!("写 package.json 失败: {e}"))?;
+    }
+    let node = resolve_node()?;
+    let npm = resolve_npm(&node);
+
+    let _ = app.emit("install-progress", serde_json::json!({ "phase": "准备安装 dsh 引擎…", "done": false }));
+
+    let mut cmd = Command::new(&npm)
+        .arg("install")
+        .arg("--prefix")
+        .arg(&runtime)
+        .arg(format!("@deepseek-ai/dsh@{DEFAULT_DSH_VERSION}"))
+        .arg("--loglevel=info") // 非终端下默认只打警告;降到 info 让下载/安装过程可见
+        .current_dir(&runtime)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("启动 npm install 失败: {e}"))?;
+
+    let out = cmd.stdout.take().ok_or("无法读取 npm stdout")?;
+    let err = cmd.stderr.take().ok_or("无法读取 npm stderr")?;
+    let app2 = app.clone();
+    std::thread::spawn(move || {
+        for line in std::io::BufReader::new(out).lines().flatten() {
+            let _ = app2.emit("install-progress", serde_json::json!({ "phase": line, "done": false }));
+        }
+    });
+    let app3 = app.clone();
+    std::thread::spawn(move || {
+        for line in std::io::BufReader::new(err).lines().flatten() {
+            let _ = app3.emit("install-progress", serde_json::json!({ "phase": line, "done": false }));
+        }
+    });
+
+    let status = cmd.wait().map_err(|e| format!("等待 npm install 失败: {e}"))?;
+    if !status.success() {
+        return Err(format!("安装失败 (exit = {status})"));
+    }
+
+    let _ = app.emit("install-progress", serde_json::json!({ "phase": "安装完成", "done": true }));
+    Ok(VersionInfo {
+        app_version: env!("CARGO_PKG_VERSION").to_string(),
+        engine_version: ENGINE_VERSION.to_string(),
+        dsh_version: read_dsh_version(&runtime),
+        platform: std::env::consts::OS.to_string(),
+    })
+}
+
 // ---------- 入口 ----------
 
 pub fn run() {
@@ -477,7 +557,8 @@ pub fn run() {
             check_update,
             check_app_update,
             open_external,
-            upgrade_dsh
+            upgrade_dsh,
+            install_dsh
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
