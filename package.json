@@ -19,6 +19,7 @@
   "build": {
     "appId": "com.deepseek.harness",
     "productName": "DeepSeek Harness",
+    "icon": "resources/icon.png",
     "asar": false,
     "npmRebuild": false,
     "directories": {
@@ -31,6 +32,11 @@
       "renderer.js",
       "package.json"
     ],
+    "publish": {
+      "provider": "github",
+      "owner": "baozoulolw",
+      "repo": "dsh-desktop"
+    },
     "mac": {
       "target": [
         "dmg",

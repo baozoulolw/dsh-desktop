@@ -29,6 +29,9 @@ jobs:
             name: win-x64
             command: build:win
     runs-on: ${{ matrix.os }}
+    # 发布 GitHub Releases 需要写入权限
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -46,11 +49,11 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Package ${{ matrix.name }}
-        run: pnpm ${{ matrix.command }}
+        run: pnpm ${{ matrix.command }} --publish onTagOrDraft
         env:
           # 无签名证书时跳过 codesign，避免 CI 卡在签名步骤
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          # electron-builder 下载 winCodeSign 等打包工具需 GitHub token，避免限流
+          # electron-builder 发布到 GitHub Releases 及下载打包工具都需要 GitHub token
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
