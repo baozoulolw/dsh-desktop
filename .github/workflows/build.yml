@@ -19,9 +19,6 @@ jobs:
           - os: macos-latest      # arm64 Apple Silicon
             name: mac-arm64
             command: build:mac
-          - os: macos-13          # x64 Intel
-            name: mac-x64
-            command: build:mac
           - os: ubuntu-latest     # x64
             name: linux-x64
             command: build:linux
