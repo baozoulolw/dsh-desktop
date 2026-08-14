@@ -1,8 +1,8 @@
 name: Build & Package
 
-# 触发方式：
-#  - 手动：仓库 Actions 页点 "Run workflow"
-#  - 打了 v* 标签（如 v0.1.0）自动触发
+# 触发方式:
+#  - 手动:仓库 Actions 页点 "Run workflow"
+#  - 打了 v* 标签(如 v0.1.0)自动触发
 on:
   workflow_dispatch:
   push:
@@ -14,17 +14,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 每个平台独立打包：机器会自动安装对应平台的 koffi/sharp/ripgrep 原生二进制
+        # 每个平台独立打包
         include:
           - os: macos-latest      # arm64 Apple Silicon
             name: mac-arm64
-            command: build:mac
+            args: --target aarch64-apple-darwin
           - os: ubuntu-latest     # x64
             name: linux-x64
-            command: build:linux
           - os: windows-latest    # x64
             name: win-x64
-            command: build:win
     runs-on: ${{ matrix.os }}
     # 发布 GitHub Releases 需要写入权限
     permissions:
@@ -35,26 +33,40 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 9
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
 
-      - name: Install dependencies
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install Linux system deps
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev
+
+      - name: Install frontend deps
         run: pnpm install --frozen-lockfile
 
-      - name: Package ${{ matrix.name }}
-        run: pnpm ${{ matrix.command }} --publish onTagOrDraft
+      # tauri-action 执行 tauri build 并上传产物到 GitHub Releases(tag 场景会建草稿)
+      - uses: tauri-apps/tauri-action@v0
         env:
-          # 无签名证书时跳过 codesign，避免 CI 卡在签名步骤
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          # electron-builder 发布到 GitHub Releases 及下载打包工具都需要 GitHub token
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'DeepSeek Harness ${{ github.ref_name }}'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
 
-      # electron-builder 默认把 release 创建为 draft(草稿),需转正式才对公众可见。
-      # 打 tag 时把所有平台产物上传完后,把 release 从草稿转正式。
+      # tauri-action 默认把 release 建为草稿,打 tag 时把所有平台产物上传完后转正式。
       - name: Publish release (转正式)
         if: startsWith(github.ref, 'refs/tags/')
         run: gh release edit "$GITHUB_REF_NAME" --draft=false
@@ -66,9 +78,10 @@ jobs:
         with:
           name: ${{ matrix.name }}
           path: |
-            dist/*.dmg
-            dist/*.zip
-            dist/*.exe
-            dist/*.AppImage
-            dist/*.deb
+            src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.app
+            src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.msi
+            src-tauri/target/release/bundle/**/*.AppImage
+            src-tauri/target/release/bundle/**/*.deb
           if-no-files-found: warn

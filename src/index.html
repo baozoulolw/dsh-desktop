@@ -2,7 +2,6 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'" />
   <title>DeepSeek Harness</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -10,16 +9,16 @@
 
     body { display: flex; flex-direction: column; background: #1e1e1e; }
 
-    /* 顶部标题栏：macOS 原生无边框下，左侧让位给红黄绿按钮 */
+    /* 顶部标题栏:macOS Overlay 无边框下,左侧让位给红黄绿按钮 */
     header {
       height: 38px;
       flex: 0 0 38px;
       display: flex;
       align-items: center;
-      padding: 0 10px 0 78px; /* 左侧为原生 traffic lights 留位 */
+      padding: 0 10px 0 92px; /* 左侧为原生 traffic lights 留位(避开最右绿点) */
       background: #1e1e1e;
       color: #d0d0d0;
-      -webkit-app-region: drag; /* 整条可拖拽窗口 */
+      -webkit-app-region: drag; /* 整条可拖拽窗口(Tauri 下由 data-tauri-drag-region 触发) */
       user-select: none;
       -webkit-user-select: none;
       gap: 8px;
@@ -31,17 +30,7 @@
     }
     header .spacer { flex: 1; }
 
-    .win-btn {
-      -webkit-app-region: no-drag;
-      border: none; background: transparent; color: #b0b0b0;
-      width: 30px; height: 26px; border-radius: 5px; cursor: pointer; font-size: 13px;
-      display: inline-flex; align-items: center; justify-content: center;
-    }
-    .win-btn:hover { background: rgba(255,255,255,.12); color: #fff; }
-    .win-btn.close:hover { background: #e81123; color: #fff; }
-
     button.action {
-      -webkit-app-region: no-drag;
       border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08);
       color: #d0d0d0; font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
     }
@@ -50,7 +39,7 @@
     button.action.primary { background: #0078d4; border-color: #0078d4; color: #fff; }
     button.action.primary:hover { background: #1a86d9; }
 
-    /* 更新提示按钮：有新版时显示，带红点 */
+    /* 更新提示按钮:有新版时显示,带红点 */
     #updateBtn {
       display: none;
       position: relative;
@@ -66,10 +55,12 @@
       display: none;
     }
 
-    /* webview 铺满剩余空间 */
-    webview {
+    /* iframe 铺满剩余空间 */
+    iframe#dsh {
       flex: 1;
+      width: 100%;
       border: none;
+      background: #fff;
     }
 
     /* 版本/升级下拉面板 */
@@ -89,7 +80,7 @@
     .panel .section-divider { height: 1px; background: #333; margin: 12px 0 4px; }
     .panel .progress { margin-top: 10px; max-height: 90px; overflow: auto; font: 11px/1.5 ui-monospace, monospace; color: #9cdcfe; white-space: pre-wrap; }
     .panel .hint { margin-top: 8px; color: #7c7c7c; font-size: 11px; }
-    /* 检查更新状态提示：含 loading 转圈 */
+    /* 检查更新状态提示:含 loading 转圈 */
     .status { margin-top: 10px; font-size: 12px; display: flex; align-items: center; gap: 7px; min-height: 16px; }
     .status:empty { display: none; }
     .status.loading::before {
@@ -103,19 +94,19 @@
   </style>
 </head>
 <body>
-  <header id="titlebar">
-    <span class="brand">DeepSeek Harness</span>
+  <header id="titlebar" data-tauri-drag-region>
+    <span class="brand" data-tauri-drag-region>DeepSeek Harness</span>
     <span class="badge" id="dshBadge">dsh …</span>
-    <span class="spacer"></span>
+    <span class="spacer" data-tauri-drag-region></span>
     <button class="action" id="updateBtn" title="有可用更新">更新</button>
     <button class="action" id="versionBtn">版本<span id="appUpdateDot"></span></button>
   </header>
 
-  <webview id="dsh" src="about:blank"></webview>
+  <iframe id="dsh" src="about:blank"></iframe>
 
   <div class="panel" id="panel">
     <h3>关于 / 升级</h3>
-    <!-- 应用（DeepSeek Harness 本体）信息与更新 -->
+    <!-- 应用(DeepSeek Harness 本体)信息与更新 -->
     <div class="row"><span class="k">应用版本</span><span class="v" id="pAppVer">—</span></div>
     <div class="row"><span class="k">应用最新</span><span class="v" id="pAppLatest">—</span></div>
     <div class="actions">
@@ -123,7 +114,7 @@
     </div>
     <div class="section-divider"></div>
     <!-- dsh 引擎信息与升级 -->
-    <div class="row"><span class="k">Electron</span><span class="v" id="pEleVer">—</span></div>
+    <div class="row"><span class="k">Tauri</span><span class="v" id="pEleVer">—</span></div>
     <div class="row"><span class="k">dsh 当前版</span><span class="v" id="pCurVer">—</span></div>
     <div class="row"><span class="k">dsh 最新版</span><span class="v" id="pLatestVer">—</span></div>
     <div class="actions">
@@ -132,9 +123,9 @@
     </div>
     <div class="status" id="pStatus"></div>
     <div class="progress" id="pProgress" style="display:none"></div>
-    <div class="hint">升级会在本目录执行 <code>pnpm install</code> 更新 dsh 包，完成后自动重启。</div>
+    <div class="hint">升级会在用户数据目录下的 dsh-runtime 执行 <code>npm install</code> 更新 dsh 包,完成后自动重启。</div>
   </div>
 
-  <script src="renderer.js"></script>
+  <script type="module" src="/renderer.js"></script>
 </body>
 </html>
