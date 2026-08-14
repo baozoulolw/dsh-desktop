@@ -50,6 +50,8 @@ jobs:
         env:
           # 无签名证书时跳过 codesign，避免 CI 卡在签名步骤
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          # electron-builder 下载 winCodeSign 等打包工具需 GitHub token，避免限流
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
