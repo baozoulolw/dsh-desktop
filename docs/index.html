@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DeepSeek Harness Desktop — 原生桌面体验的 DeepSeek 开发工具</title>
-<meta name="description" content="DeepSeek Harness (dsh) 的跨平台 Tauri 桌面封装，无边框窗口、内嵌 dsh 子进程、版本检测与一键升级、三平台自动打包。">
+<title id="pg-title">DeepSeek Harness Desktop — 原生桌面体验的 DeepSeek 开发工具</title>
+<meta name="description" id="pg-desc" content="DeepSeek Harness (dsh) 的跨平台 Tauri 桌面封装，无边框窗口、内嵌 dsh 子进程、版本检测与一键升级、三平台自动打包。">
 <link rel="icon" type="image/svg+xml" href="https://raw.githubusercontent.com/baozoulolw/dsh-desktop/main/resources/icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -66,6 +66,26 @@
     transition:transform .2s,box-shadow .2s;
   }
   .nav-cta:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(77,155,254,.5)}
+
+  /* ---------- 语言切换 ---------- */
+  .lang-switch{
+    display:inline-flex;align-items:center;gap:2px;
+    background:rgba(255,255,255,.06);border:1px solid var(--border);
+    border-radius:999px;padding:3px;
+  }
+  .lang-switch button{
+    border:none;background:transparent;color:var(--text-dim);
+    font-size:12.5px;font-weight:600;padding:4px 10px;border-radius:999px;cursor:pointer;
+    font-family:inherit;transition:background .2s,color .2s;
+  }
+  .lang-switch button:hover{color:var(--text)}
+  .lang-switch button.active{
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    color:#fff;box-shadow:0 4px 12px rgba(77,155,254,.35);
+  }
+  @media(max-width:640px){
+    .nav-cta{display:none}
+  }
 
   /* ---------- Hero ---------- */
   header{position:relative;padding:96px 0 80px;text-align:center}
@@ -249,38 +269,42 @@
       DeepSeek Harness
     </a>
     <div class="nav-links">
-      <a href="#features">特性</a>
-      <a href="#platforms">平台</a>
-      <a href="#getting-started">快速开始</a>
+      <a href="#features" data-i18n="nav.features">特性</a>
+      <a href="#platforms" data-i18n="nav.platforms">平台</a>
+      <a href="#getting-started" data-i18n="nav.getting-started">快速开始</a>
       <a href="https://github.com/baozoulolw/dsh-desktop" target="_blank" rel="noopener">GitHub</a>
     </div>
-    <a class="nav-cta" href="https://github.com/baozoulolw/dsh-desktop/releases" target="_blank" rel="noopener">立即下载</a>
+    <div class="lang-switch">
+      <button type="button" data-lang="zh" class="active">中</button>
+      <button type="button" data-lang="en">EN</button>
+    </div>
+    <a class="nav-cta" href="https://github.com/baozoulolw/dsh-desktop/releases" target="_blank" rel="noopener" data-i18n="nav.download">立即下载</a>
   </div>
 </nav>
 
 <!-- Hero -->
 <header>
   <div class="container">
-    <div class="hero-badge">⚡ 原生桌面 · 一键升级 · 三平台</div>
-    <h1>DeepSeek Harness<br>原生桌面体验</h1>
-    <p class="hero-sub">将 DeepSeek Harness（dsh web）封装为跨平台原生桌面应用。无边框窗口、内嵌 dsh 子进程、版本检测与一键升级，开箱即用。</p>
+    <div class="hero-badge" data-i18n="hero.badge">⚡ 原生桌面 · 一键升级 · 三平台</div>
+    <h1>DeepSeek Harness<br><span data-i18n="hero.title2">原生桌面体验</span></h1>
+    <p class="hero-sub" data-i18n="hero.sub">将 DeepSeek Harness（dsh web）封装为跨平台原生桌面应用。无边框窗口、内嵌 dsh 子进程、版本检测与一键升级，开箱即用。</p>
 
     <div class="hero-actions">
       <a class="btn btn-primary" href="https://github.com/baozoulolw/dsh-desktop/releases" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        免费下载
+        <span data-i18n="hero.free-download">免费下载</span>
       </a>
       <a class="btn btn-ghost" href="https://github.com/baozoulolw/dsh-desktop" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2C7 2 4 5.5 4 9.5c0 3 1.7 5 3 6.5v2h10v-2c1.3-1.5 3-3.5 3-6.5C20 5.5 17 2 12 2z"/></svg>
-        查看源码
+        <span data-i18n="hero.source-code">查看源码</span>
       </a>
     </div>
 
     <div class="platforms">
-      <span>🖥 macOS</span>
-      <span>🪟 Windows</span>
-      <span>🐧 Linux</span>
-      <span>downloads.dmg / .zip / .exe / .AppImage / .deb</span>
+      <span data-i18n="platforms.macos">🖥 macOS</span>
+      <span data-i18n="platforms.windows">🪟 Windows</span>
+      <span data-i18n="platforms.linux">🐧 Linux</span>
+      <span data-i18n="platforms.formats">downloads.dmg / .zip / .exe / .AppImage / .deb</span>
     </div>
 
     <!-- 产品预览 -->
@@ -288,38 +312,38 @@
       <div class="window">
         <div class="titlebar">
           <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-          <span class="url">dsh web · 开发工作台</span>
+          <span class="url" data-i18n="preview.url">dsh web · 开发工作台</span>
         </div>
         <div class="bar">
-          <span class="pill">dsh 0.1.0</span>
-          <span style="opacity:.85">DeepSeek Harness 开发环境</span>
+          <span class="pill" data-i18n="preview.pill">dsh 0.1.0</span>
+          <span style="opacity:.85" data-i18n="preview.bar">DeepSeek Harness 开发环境</span>
         </div>
         <div class="panel">
           <div class="sidebar">
-            <div class="side-item act"><span>💬</span> 对话</div>
-            <div class="side-item"><span>📁</span> 工作区</div>
-            <div class="side-item"><span>🧪</span> 测试</div>
-            <div class="side-item"><span>🚀</span> 部署</div>
-            <div class="side-item"><span>⚙️</span> 设置</div>
+            <div class="side-item act"><span>💬</span> <span data-i18n="preview.sb.chat">对话</span></div>
+            <div class="side-item"><span>📁</span> <span data-i18n="preview.sb.workspace">工作区</span></div>
+            <div class="side-item"><span>🧪</span> <span data-i18n="preview.sb.test">测试</span></div>
+            <div class="side-item"><span>🚀</span> <span data-i18n="preview.sb.deploy">部署</span></div>
+            <div class="side-item"><span>⚙️</span> <span data-i18n="preview.sb.settings">设置</span></div>
           </div>
           <div class="main">
             <div class="chat-row">
-              <div class="avatar user">你</div>
-              <div class="bubble">帮我初始化一个 DeepSeek 驱动的命令行工具项目。</div>
+              <div class="avatar user" data-i18n="preview.av.user">你</div>
+              <div class="bubble" data-i18n="preview.bubble.user">帮我初始化一个 DeepSeek 驱动的命令行工具项目。</div>
             </div>
             <div class="chat-row">
               <div class="avatar bot">🤖</div>
-              <div class="bubble bot">好的，正在为你搭建项目骨架…
-                <div class="code">$ dsh init my-tool
+              <div class="bubble bot"><span data-i18n="preview.bubble.bot">好的，正在为你搭建项目骨架…</span>
+                <div class="code" data-i18n="preview.code">$ dsh init my-tool
 ✓ 项目结构已生成
 ✓ 依赖已安装
 → 输入 dsh web 启动开发环境</div>
               </div>
             </div>
             <div class="ver">
-              <div class="row"><span>应用版本</span><span style="color:var(--text)">0.2.1</span></div>
-              <div class="row"><span>Tauri</span><span style="color:var(--text)">2.x</span></div>
-              <div class="row"><span>dsh</span><span style="color:var(--cyan)">检测到新版本 · 一键升级</span></div>
+              <div class="row"><span data-i18n="preview.ver.app">应用版本</span><span style="color:var(--text)">0.2.1</span></div>
+              <div class="row"><span data-i18n="preview.ver.tauri">Tauri</span><span style="color:var(--text)">2.x</span></div>
+              <div class="row"><span data-i18n="preview.ver.dsh">dsh</span><span style="color:var(--cyan)" data-i18n="preview.ver.dsh-state">检测到新版本 · 一键升级</span></div>
             </div>
           </div>
         </div>
@@ -333,29 +357,29 @@
   <div class="container">
     <div class="sec-head">
       <div class="sec-tag">Features</div>
-      <h2>为开发者打造的桌面工作台</h2>
-      <p class="sec-sub">专注于 DeepSeek 开发体验，省去繁琐配置，专注核心工作。</p>
+      <h2 data-i18n="features.title">为开发者打造的桌面工作台</h2>
+      <p class="sec-sub" data-i18n="features.sub">专注于 DeepSeek 开发体验，省去繁琐配置，专注核心工作。</p>
     </div>
     <div class="grid">
       <div class="card">
         <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>
-        <h3>内嵌 dsh</h3>
-        <p>启动时自动拉起 dsh web 子进程，以原生 webview 嵌入其 Web 界面，操作体验与原生应用完全一致。</p>
+        <h3 data-i18n="features.f1.t">内嵌 dsh</h3>
+        <p data-i18n="features.f1.d">启动时自动拉起 dsh web 子进程，以原生 webview 嵌入其 Web 界面，操作体验与原生应用完全一致。</p>
       </div>
       <div class="card">
         <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
-        <h3>版本检测与一键升级</h3>
-        <p>启动即自动检测 dsh 最新版，发现新版即提示。升级面板展示应用 / Tauri / dsh 三方版本，一键升级并自动重启。</p>
+        <h3 data-i18n="features.f2.t">版本检测与一键升级</h3>
+        <p data-i18n="features.f2.d">启动即自动检测 dsh 最新版，发现新版即提示。升级面板展示应用 / Tauri / dsh 三方版本，一键升级并自动重启。</p>
       </div>
       <div class="card">
         <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 12h18M12 3v18"/></svg></div>
-        <h3>无边框窗口</h3>
-        <p>macOS 使用原生 hiddenInset 无边框（保留红黄绿按钮，页面延伸至顶部）；Windows / Linux 使用系统标题栏。</p>
+        <h3 data-i18n="features.f3.t">无边框窗口</h3>
+        <p data-i18n="features.f3.d">macOS 使用原生 hiddenInset 无边框（保留红黄绿按钮，页面延伸至顶部）；Windows / Linux 使用系统标题栏。</p>
       </div>
       <div class="card">
         <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div>
-        <h3>三平台自动打包</h3>
-        <p>基于 Tauri 与 GitHub Actions 矩阵构建，一条命令为 macOS、Windows、Linux 并行产出安装包。</p>
+        <h3 data-i18n="features.f4.t">三平台自动打包</h3>
+        <p data-i18n="features.f4.d">基于 Tauri 与 GitHub Actions 矩阵构建，一条命令为 macOS、Windows、Linux 并行产出安装包。</p>
       </div>
     </div>
   </div>
@@ -366,33 +390,33 @@
   <div class="container">
     <div class="sec-head">
       <div class="sec-tag">Platforms</div>
-      <h2>一处开发，全平台交付</h2>
-      <p class="sec-sub">CI 自动为四个目标并行打包，产物直接上传到 GitHub Releases。</p>
+      <h2 data-i18n="platforms.title">一处开发，全平台交付</h2>
+      <p class="sec-sub" data-i18n="platforms.sub">CI 自动为四个目标并行打包，产物直接上传到 GitHub Releases。</p>
     </div>
     <div class="os-grid">
       <div class="os">
         <div class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.5 18.3c-.28.62-1.2 1.83-2.42 1.83-1.05 0-1.37-.68-2.55-.68-1.18 0-1.55.68-2.56.68-1.22 0-2.12-1.13-2.47-1.75-1.17-1.78-2.07-5.05-.9-7.25.58-1.1 1.7-1.8 2.9-1.82 1.1-.02 1.66.62 2.5.62.83 0 1.34-.62 2.5-.62.9 0 1.85.4 2.4 1.2-2.1 1.2-1.76 4.3.55 4.3zM17.6 4.4c.5-.6.9-1.43.76-2.4-1.2.05-2.6.8-3.4 1.8-.5.6-1 1.5-.83 2.4 1.28.1 2.6-.7 3.47-1.8z"/></svg></div>
         <h3 class="os-name">macOS</h3>
-        <p class="arch">Apple Silicon (arm64)</p>
-        <span class="fmt">.dmg · .app</span>
+        <p class="arch" data-i18n="platforms.card1.arch">Apple Silicon (arm64)</p>
+        <span class="fmt" data-i18n="platforms.card1.fmt">.dmg · .app</span>
       </div>
       <div class="os">
         <div class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.7v12.6L21 18V6L3 5.7zm14.6 1.2l-5.2.28v4.9l5.2-.05V6.9zM8.3 8.1l1.9.1v4.6l-1.9-.05V8.1zm-3.4-.2l1.6.1v4.7l-1.6-.03V7.9zM3 18.3l1.6-.03v-4.7l-1.6.1v4.63zm3.4-.1l1.9-.05v-4.7l-1.9.1v4.65zm3.4-.1l1.9-.05v-4.7l-1.9.1v4.65zm3.4-.1l1.9-.05v-4.7l-1.9.1v4.65zm3.4-.1l5.2-.03v-4.7l-5.2.1v4.63z"/></svg></div>
         <h3 class="os-name">Windows</h3>
-        <p class="arch">x64</p>
-        <span class="fmt">.exe (NSIS) · .msi</span>
+        <p class="arch" data-i18n="platforms.card2.arch">x64</p>
+        <span class="fmt" data-i18n="platforms.card2.fmt">.exe (NSIS) · .msi</span>
       </div>
       <div class="os">
         <div class="logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.3l7.4 3.7-2.6 1.3-4.8-2.4-4.8 2.4-2.6-1.3L12 4.3zM4.5 15.9V9.6l2.6 1.3v4.7l4.9 2.5v3.1L4.5 15.9zm7.5 2.5l-3-1.5v-3.5l3 1.5 3-1.5v3.5l-3 1.5zm3.5-2.5v-4.7l2.6-1.3v6.3l-2.6 1.3v1.6L19.5 19V9.6l-4.5 2.3v-3.1L12 6.9l-3 1.5v3.1L4.5 9.6v6.3l3.5 1.8v2.6l4 2V19l4 2v-2.6l3.5-1.8z"/></svg></div>
         <h3 class="os-name">Linux</h3>
-        <p class="arch">x64</p>
-        <span class="fmt">.AppImage · .deb</span>
+        <p class="arch" data-i18n="platforms.card3.arch">x64</p>
+        <span class="fmt" data-i18n="platforms.card3.fmt">.AppImage · .deb</span>
       </div>
       <div class="os">
         <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 0 0-3.16 19.5c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.15-1.11-1.46-1.11-1.46-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85V21c0 .27.18.58.69.48A10 10 0 0 0 12 2z"/></svg></div>
-        <h3 class="os-name">开源驱动</h3>
-        <p class="arch">GitHub Actions 矩阵构建</p>
-        <span class="fmt">v* 标签自动发布</span>
+        <h3 class="os-name" data-i18n="platforms.card4.name">开源驱动</h3>
+        <p class="arch" data-i18n="platforms.card4.arch">GitHub Actions 矩阵构建</p>
+        <span class="fmt" data-i18n="platforms.card4.fmt">v* 标签自动发布</span>
       </div>
     </div>
   </div>
@@ -403,55 +427,55 @@
   <div class="container">
     <div class="sec-head">
       <div class="sec-tag">Getting Started</div>
-      <h2>快速开始</h2>
-      <p class="sec-sub">从仓库拉取源码，十几秒即可在本地运行。</p>
+      <h2 data-i18n="gs.title">快速开始</h2>
+      <p class="sec-sub" data-i18n="gs.sub">从仓库拉取源码，十几秒即可在本地运行。</p>
     </div>
     <div class="get-started">
       <div class="steps">
         <div class="step">
           <div class="num">1</div>
           <div>
-            <h4>环境要求</h4>
-            <p>Node.js ≥ 20、Rust stable、pnpm ≥ 9。</p>
+            <h4 data-i18n="gs.s1.t">环境要求</h4>
+            <p data-i18n="gs.s1.d">Node.js ≥ 20、Rust stable、pnpm ≥ 9。</p>
           </div>
         </div>
         <div class="step">
           <div class="num">2</div>
           <div>
-            <h4>安装依赖</h4>
-            <p>一键安装全部依赖，支持缓存。</p>
+            <h4 data-i18n="gs.s2.t">安装依赖</h4>
+            <p data-i18n="gs.s2.d">一键安装全部依赖，支持缓存。</p>
           </div>
         </div>
         <div class="step">
           <div class="num">3</div>
           <div>
-            <h4>本地运行</h4>
-            <p>启动开发模式，自动拉起 dsh 子进程。</p>
+            <h4 data-i18n="gs.s3.t">本地运行</h4>
+            <p data-i18n="gs.s3.d">启动开发模式，自动拉起 dsh 子进程。</p>
           </div>
         </div>
         <div class="step">
           <div class="num">4</div>
           <div>
-            <h4>打包发布</h4>
-            <p>为当前平台或指定平台打包，产物位于 src-tauri/target/release/bundle/。</p>
+            <h4 data-i18n="gs.s4.t">打包发布</h4>
+            <p data-i18n="gs.s4.d">为当前平台或指定平台打包，产物位于 src-tauri/target/release/bundle/。</p>
           </div>
         </div>
       </div>
       <div class="code-card">
-        <div class="head"><span>⬤⬤⬤</span> dsh-desktop</div>
-        <pre><code><span class="cm"># 1. 环境要求</span>
-<span class="c">node</span> --version   <span class="cm"># ≥ 20</span>
-<span class="c">pnpm</span> --version   <span class="cm"># ≥ 9</span>
+        <div class="head"><span>⬤⬤⬤</span> <span data-i18n="gs.code.title">dsh-desktop</span></div>
+        <pre><code><span class="cm" data-i18n="gs.code.c1"># 1. 环境要求</span>
+<span class="c">node</span> --version   <span class="cm" data-i18n="gs.code.c2"># ≥ 20</span>
+<span class="c">pnpm</span> --version   <span class="cm" data-i18n="gs.code.c3"># ≥ 9</span>
 
-<span class="cm"># 2. 安装依赖</span>
+<span class="cm" data-i18n="gs.code.c4"># 2. 安装依赖</span>
 <span class="c">pnpm</span> install
 
-<span class="cm"># 3. 本地运行</span>
+<span class="cm" data-i18n="gs.code.c5"># 3. 本地运行</span>
 <span class="c">pnpm</span> dev
 
-<span class="cm"># 4. 打包</span>
-<span class="c">pnpm</span> build          <span class="cm"># 当前平台</span>
-<span class="c">pnpm</span> build:mac      <span class="cm"># macOS arm64</span></code></pre>
+<span class="cm" data-i18n="gs.code.c6"># 4. 打包</span>
+<span class="c">pnpm</span> build          <span class="cm" data-i18n="gs.code.c7"># 当前平台</span>
+<span class="c">pnpm</span> build:mac      <span class="cm" data-i18n="gs.code.c8"># macOS arm64</span></code></pre>
       </div>
     </div>
   </div>
@@ -466,16 +490,137 @@
         DeepSeek Harness Desktop
       </a>
       <div class="foot-links">
-        <a href="#features">特性</a>
-        <a href="#platforms">平台</a>
-        <a href="#getting-started">快速开始</a>
+        <a href="#features" data-i18n="footer.features">特性</a>
+        <a href="#platforms" data-i18n="footer.platforms">平台</a>
+        <a href="#getting-started" data-i18n="footer.getting-started">快速开始</a>
         <a href="https://github.com/baozoulolw/dsh-desktop" target="_blank" rel="noopener">GitHub</a>
         <a href="https://github.com/baozoulolw/dsh-desktop/releases" target="_blank" rel="noopener">Releases</a>
       </div>
     </div>
-    <div class="copy">© 2026 DeepSeek Harness Desktop · 由 GitHub Pages 托管 · <a href="https://github.com/baozoulolw/dsh-desktop" target="_blank" rel="noopener" style="color:var(--accent)">开源协议见仓库</a></div>
+    <div class="copy"><span data-i18n="footer.rights">© 2026 DeepSeek Harness Desktop · 由 GitHub Pages 托管 · </span><a href="https://github.com/baozoulolw/dsh-desktop" target="_blank" rel="noopener" style="color:var(--accent)" data-i18n="footer.license">开源协议见仓库</a></div>
   </div>
 </footer>
+
+<script>
+/* ---------- 中英双语切换 ---------- */
+(function () {
+  var KEY = 'dsh-lang';
+  var I18N = {
+    'meta.title': { zh: 'DeepSeek Harness Desktop — 原生桌面体验的 DeepSeek 开发工具', en: 'DeepSeek Harness Desktop — A Native Desktop Experience for DeepSeek Development' },
+    'meta.desc': { zh: 'DeepSeek Harness (dsh) 的跨平台 Tauri 桌面封装，无边框窗口、内嵌 dsh 子进程、版本检测与一键升级、三平台自动打包。', en: 'A cross-platform Tauri desktop wrapper for DeepSeek Harness (dsh): frameless window, embedded dsh subprocess, version checking & one-click upgrade, and three-platform auto-packaging.' },
+
+    'nav.features': { zh: '特性', en: 'Features' },
+    'nav.platforms': { zh: '平台', en: 'Platforms' },
+    'nav.getting-started': { zh: '快速开始', en: 'Getting Started' },
+    'nav.download': { zh: '立即下载', en: 'Download Now' },
+
+    'hero.badge': { zh: '⚡ 原生桌面 · 一键升级 · 三平台', en: '⚡ Native desktop · One-click upgrade · Three platforms' },
+    'hero.title2': { zh: '原生桌面体验', en: 'Native Desktop Experience' },
+    'hero.sub': { zh: '将 DeepSeek Harness（dsh web）封装为跨平台原生桌面应用。无边框窗口、内嵌 dsh 子进程、版本检测与一键升级，开箱即用。', en: 'Wraps DeepSeek Harness (dsh web) into a cross-platform native desktop app. Frameless window, embedded dsh subprocess, version detection with one-click upgrade — ready out of the box.' },
+    'hero.free-download': { zh: '免费下载', en: 'Free Download' },
+    'hero.source-code': { zh: '查看源码', en: 'View Source' },
+
+    'platforms.macos': { zh: '🖥 macOS', en: '🖥 macOS' },
+    'platforms.windows': { zh: '🪟 Windows', en: '🪟 Windows' },
+    'platforms.linux': { zh: '🐧 Linux', en: '🐧 Linux' },
+    'platforms.formats': { zh: 'downloads.dmg / .zip / .exe / .AppImage / .deb', en: 'downloads.dmg / .zip / .exe / .AppImage / .deb' },
+
+    'preview.url': { zh: 'dsh web · 开发工作台', en: 'dsh web · Dev Workbench' },
+    'preview.pill': { zh: 'dsh 0.1.0', en: 'dsh 0.1.0' },
+    'preview.bar': { zh: 'DeepSeek Harness 开发环境', en: 'DeepSeek Harness Dev Environment' },
+    'preview.sb.chat': { zh: '对话', en: 'Chat' },
+    'preview.sb.workspace': { zh: '工作区', en: 'Workspace' },
+    'preview.sb.test': { zh: '测试', en: 'Test' },
+    'preview.sb.deploy': { zh: '部署', en: 'Deploy' },
+    'preview.sb.settings': { zh: '设置', en: 'Settings' },
+    'preview.av.user': { zh: '你', en: 'You' },
+    'preview.bubble.user': { zh: '帮我初始化一个 DeepSeek 驱动的命令行工具项目。', en: 'Help me scaffold a DeepSeek-powered CLI tool project.' },
+    'preview.bubble.bot': { zh: '好的，正在为你搭建项目骨架…', en: 'Sure, setting up the project skeleton…' },
+    'preview.code': { zh: '$ dsh init my-tool\n✓ 项目结构已生成\n✓ 依赖已安装\n→ 输入 dsh web 启动开发环境', en: '$ dsh init my-tool\n✓ Project structure generated\n✓ Dependencies installed\n→ Run dsh web to start the dev environment' },
+    'preview.ver.app': { zh: '应用版本', en: 'App Version' },
+    'preview.ver.tauri': { zh: 'Tauri', en: 'Tauri' },
+    'preview.ver.dsh': { zh: 'dsh', en: 'dsh' },
+    'preview.ver.dsh-state': { zh: '检测到新版本 · 一键升级', en: 'New version detected · Upgrade now' },
+
+    'features.title': { zh: '为开发者打造的桌面工作台', en: 'A Desktop Workbench Built for Developers' },
+    'features.sub': { zh: '专注于 DeepSeek 开发体验，省去繁琐配置，专注核心工作。', en: 'Focused on the DeepSeek dev experience — skip tedious config and stay in the flow.' },
+    'features.f1.t': { zh: '内嵌 dsh', en: 'Embedded dsh' },
+    'features.f1.d': { zh: '启动时自动拉起 dsh web 子进程，以原生 webview 嵌入其 Web 界面，操作体验与原生应用完全一致。', en: 'Launches the dsh web subprocess on startup and embeds its UI in a native webview, matching the feel of a native app.' },
+    'features.f2.t': { zh: '版本检测与一键升级', en: 'Version Check & One-Click Upgrade' },
+    'features.f2.d': { zh: '启动即自动检测 dsh 最新版，发现新版即提示。升级面板展示应用 / Tauri / dsh 三方版本，一键升级并自动重启。', en: 'Detects the latest dsh on startup and prompts when a new version is available. The upgrade panel shows the app / Tauri / dsh versions and supports one-click upgrade with auto-restart.' },
+    'features.f3.t': { zh: '无边框窗口', en: 'Frameless Window' },
+    'features.f3.d': { zh: 'macOS 使用原生 hiddenInset 无边框（保留红黄绿按钮，页面延伸至顶部）；Windows / Linux 使用系统标题栏。', en: 'macOS uses the native hiddenInset frameless style (traffic lights kept, page extends to the top); Windows / Linux use the system title bar.' },
+    'features.f4.t': { zh: '三平台自动打包', en: 'Three-Platform Auto-Build' },
+    'features.f4.d': { zh: '基于 Tauri 与 GitHub Actions 矩阵构建，一条命令为 macOS、Windows、Linux 并行产出安装包。', en: 'Built on Tauri with a GitHub Actions matrix — one command produces installers for macOS, Windows, and Linux in parallel.' },
+
+    'platforms.title': { zh: '一处开发，全平台交付', en: 'Build Once, Ship Everywhere' },
+    'platforms.sub': { zh: 'CI 自动为四个目标并行打包，产物直接上传到 GitHub Releases。', en: 'CI packages the targets in parallel and uploads artifacts straight to GitHub Releases.' },
+    'platforms.card1.arch': { zh: 'Apple Silicon (arm64)', en: 'Apple Silicon (arm64)' },
+    'platforms.card1.fmt': { zh: '.dmg · .app', en: '.dmg · .app' },
+    'platforms.card2.arch': { zh: 'x64', en: 'x64' },
+    'platforms.card2.fmt': { zh: '.exe (NSIS) · .msi', en: '.exe (NSIS) · .msi' },
+    'platforms.card3.arch': { zh: 'x64', en: 'x64' },
+    'platforms.card3.fmt': { zh: '.AppImage · .deb', en: '.AppImage · .deb' },
+    'platforms.card4.name': { zh: '开源驱动', en: 'Open-Source Driven' },
+    'platforms.card4.arch': { zh: 'GitHub Actions 矩阵构建', en: 'GitHub Actions matrix build' },
+    'platforms.card4.fmt': { zh: 'v* 标签自动发布', en: 'Auto-published on v* tags' },
+
+    'gs.title': { zh: '快速开始', en: 'Getting Started' },
+    'gs.sub': { zh: '从仓库拉取源码，十几秒即可在本地运行。', en: 'Clone the repo and run it locally in seconds.' },
+    'gs.s1.t': { zh: '环境要求', en: 'Requirements' },
+    'gs.s1.d': { zh: 'Node.js ≥ 20、Rust stable、pnpm ≥ 9。', en: 'Node.js ≥ 20, Rust stable, pnpm ≥ 9.' },
+    'gs.s2.t': { zh: '安装依赖', en: 'Install Dependencies' },
+    'gs.s2.d': { zh: '一键安装全部依赖，支持缓存。', en: 'Install all dependencies with one command, cached.' },
+    'gs.s3.t': { zh: '本地运行', en: 'Run Locally' },
+    'gs.s3.d': { zh: '启动开发模式，自动拉起 dsh 子进程。', en: 'Start dev mode, which auto-launches the dsh subprocess.' },
+    'gs.s4.t': { zh: '打包发布', en: 'Build & Release' },
+    'gs.s4.d': { zh: '为当前平台或指定平台打包，产物位于 src-tauri/target/release/bundle/。', en: 'Build for the current or a specified platform; artifacts land in src-tauri/target/release/bundle/.' },
+    'gs.code.title': { zh: 'dsh-desktop', en: 'dsh-desktop' },
+    'gs.code.c1': { zh: '# 1. 环境要求', en: '# 1. Requirements' },
+    'gs.code.c2': { zh: '# ≥ 20', en: '# ≥ 20' },
+    'gs.code.c3': { zh: '# ≥ 9', en: '# ≥ 9' },
+    'gs.code.c4': { zh: '# 2. 安装依赖', en: '# 2. Install dependencies' },
+    'gs.code.c5': { zh: '# 3. 本地运行', en: '# 3. Run locally' },
+    'gs.code.c6': { zh: '# 4. 打包', en: '# 4. Build' },
+    'gs.code.c7': { zh: '# 当前平台', en: '# current platform' },
+    'gs.code.c8': { zh: '# macOS arm64', en: '# macOS arm64' },
+
+    'footer.features': { zh: '特性', en: 'Features' },
+    'footer.platforms': { zh: '平台', en: 'Platforms' },
+    'footer.getting-started': { zh: '快速开始', en: 'Getting Started' },
+    'footer.rights': { zh: '© 2026 DeepSeek Harness Desktop · 由 GitHub Pages 托管 · ', en: '© 2026 DeepSeek Harness Desktop · Hosted by GitHub Pages · ' },
+    'footer.license': { zh: '开源协议见仓库', en: 'See license in repo' }
+  };
+
+  function getDefaultLang() {
+    var saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) {}
+    if (saved === 'zh' || saved === 'en') return saved;
+    return (navigator.language || '').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en';
+  }
+
+  function setLang(l) {
+    l = l === 'en' ? 'en' : 'zh';
+    try { localStorage.setItem(KEY, l); } catch (e) {}
+    document.querySelectorAll('[data-i18n]').forEach(function (el) {
+      var k = el.getAttribute('data-i18n');
+      if (I18N[k] && I18N[k][l]) el.textContent = I18N[k][l];
+    });
+    document.documentElement.setAttribute('lang', l === 'zh' ? 'zh-CN' : 'en');
+    var t = document.getElementById('pg-title'); if (t) t.textContent = I18N['meta.title'][l];
+    var m = document.getElementById('pg-desc'); if (m) m.setAttribute('content', I18N['meta.desc'][l]);
+    document.querySelectorAll('.lang-switch button').forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-lang') === l);
+    });
+  }
+
+  document.querySelectorAll('.lang-switch button').forEach(function (b) {
+    b.addEventListener('click', function () { setLang(b.getAttribute('data-lang')); });
+  });
+
+  setLang(getDefaultLang());
+})();
+</script>
 
 </body>
 </html>
