@@ -20,7 +20,7 @@ use tauri::State;
 use tauri_plugin_opener::OpenerExt;
 
 /// dsh 默认版本:首次在 runtime 目录安装时使用。
-const DEFAULT_DSH_VERSION: &str = "0.1.0-rc.6";
+const DEFAULT_DSH_VERSION: &str = "0.1.0-rc.7";
 /// dsh web 启动后打印的地址,如 `dsh web: http://127.0.0.1:50721`
 const URL_RE: &str = r"dsh web: (http://\d+\.\d+\.\d+\.\d+:\d+)";
 const STARTUP_TIMEOUT_MS: u64 = 30_000;
@@ -127,6 +127,33 @@ fn resolve_npm(node: &str) -> String {
         }
     }
     "npm".to_string()
+}
+
+/// 为子进程构造包含 node/npm 所在目录的 PATH。
+/// GUI(访达/程序坞)启动应用时,子进程 PATH 往往极简(不含 Homebrew/nvm 目录)。
+/// npm 是 `#!/usr/bin/env node` 的脚本,会回退到 PATH 找 node;PATH 里没有就报
+/// `env: node: No such file or directory` 并以 127 退出。把 node/npm 目录并到 PATH 最前即可。
+fn path_with_node(node: &str, npm: &str) -> String {
+    let mut dirs: Vec<String> = Vec::new();
+    for p in [node, npm] {
+        if let Some(dir) = Path::new(p).parent() {
+            if let Some(s) = dir.to_str() {
+                if !dirs.iter().any(|d| d == s) {
+                    dirs.push(s.to_string());
+                }
+            }
+        }
+    }
+    let mut path = dirs.join(":");
+    if let Ok(existing) = std::env::var("PATH") {
+        if !existing.trim().is_empty() {
+            if !path.is_empty() {
+                path.push(':');
+            }
+            path.push_str(&existing);
+        }
+    }
+    path
 }
 
 /// 读 runtime 目录里已安装的 dsh 版本,未装则返回"未知"。
@@ -440,6 +467,7 @@ async fn upgrade_dsh(
     let _ = app.emit("upgrade-progress", serde_json::json!({ "phase": "开始升级…", "done": false }));
 
     let mut cmd = Command::new(&npm)
+        .env("PATH", path_with_node(&node, &npm))
         .arg("install")
         .arg("--prefix")
         .arg(&runtime)
@@ -504,6 +532,7 @@ async fn install_dsh(app: tauri::AppHandle) -> Result<VersionInfo, String> {
     let _ = app.emit("install-progress", serde_json::json!({ "phase": "准备安装 dsh 引擎…", "done": false }));
 
     let mut cmd = Command::new(&npm)
+        .env("PATH", path_with_node(&node, &npm))
         .arg("install")
         .arg("--prefix")
         .arg(&runtime)
