@@ -1,6 +1,6 @@
 [package]
 name = "dsh-desktop"
-version = "0.2.3"
+version = "0.2.4"
 description = "DeepSeek Harness (dsh web) 的 Tauri 桌面封装"
 authors = ["DeepSeek Harness"]
 edition = "2021"
