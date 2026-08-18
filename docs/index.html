@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title id="pg-title">DeepSeek Harness Desktop — 原生桌面体验的 DeepSeek 开发工具</title>
-<meta name="description" id="pg-desc" content="DeepSeek Harness (dsh) 的跨平台 Tauri 桌面封装，无边框窗口、内嵌 dsh 子进程、版本检测与一键升级、三平台自动打包。">
+<meta name="description" id="pg-desc" content="DeepSeek Harness (dsh) 的跨平台 Tauri 桌面封装，无边框窗口、内嵌 dsh 子进程、版本检测与一键升级、复用本机引擎、三平台自动打包。">
 <link rel="icon" type="image/svg+xml" href="https://raw.githubusercontent.com/baozoulolw/dsh-desktop/main/resources/icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -315,7 +315,7 @@
           <span class="url" data-i18n="preview.url">dsh web · 开发工作台</span>
         </div>
         <div class="bar">
-          <span class="pill" data-i18n="preview.pill">dsh 0.1.0</span>
+          <span class="pill" data-i18n="preview.pill">dsh 0.1.0-rc.7</span>
           <span style="opacity:.85" data-i18n="preview.bar">DeepSeek Harness 开发环境</span>
         </div>
         <div class="panel">
@@ -341,7 +341,7 @@
               </div>
             </div>
             <div class="ver">
-              <div class="row"><span data-i18n="preview.ver.app">应用版本</span><span style="color:var(--text)">0.2.1</span></div>
+              <div class="row"><span data-i18n="preview.ver.app">应用版本</span><span style="color:var(--text)">0.2.3</span></div>
               <div class="row"><span data-i18n="preview.ver.tauri">Tauri</span><span style="color:var(--text)">2.x</span></div>
               <div class="row"><span data-i18n="preview.ver.dsh">dsh</span><span style="color:var(--cyan)" data-i18n="preview.ver.dsh-state">检测到新版本 · 一键升级</span></div>
             </div>
@@ -380,6 +380,11 @@
         <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div>
         <h3 data-i18n="features.f4.t">三平台自动打包</h3>
         <p data-i18n="features.f4.d">基于 Tauri 与 GitHub Actions 矩阵构建，一条命令为 macOS、Windows、Linux 并行产出安装包。</p>
+      </div>
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg></div>
+        <h3 data-i18n="features.f5.t">复用本机引擎</h3>
+        <p data-i18n="features.f5.d">已有 dsh 直接复用，不重复安装：优先全局 npm，其次本应用 runtime，最后 npx；「版本」面板一键在文件管理器中打开安装位置。</p>
       </div>
     </div>
   </div>
@@ -507,7 +512,7 @@
   var KEY = 'dsh-lang';
   var I18N = {
     'meta.title': { zh: 'DeepSeek Harness Desktop — 原生桌面体验的 DeepSeek 开发工具', en: 'DeepSeek Harness Desktop — A Native Desktop Experience for DeepSeek Development' },
-    'meta.desc': { zh: 'DeepSeek Harness (dsh) 的跨平台 Tauri 桌面封装，无边框窗口、内嵌 dsh 子进程、版本检测与一键升级、三平台自动打包。', en: 'A cross-platform Tauri desktop wrapper for DeepSeek Harness (dsh): frameless window, embedded dsh subprocess, version checking & one-click upgrade, and three-platform auto-packaging.' },
+    'meta.desc': { zh: 'DeepSeek Harness (dsh) 的跨平台 Tauri 桌面封装，无边框窗口、内嵌 dsh 子进程、版本检测与一键升级、复用本机引擎、三平台自动打包。', en: 'A cross-platform Tauri desktop wrapper for DeepSeek Harness (dsh): frameless window, embedded dsh subprocess, version checking & one-click upgrade, reuse of an existing engine, and three-platform auto-packaging.' },
 
     'nav.features': { zh: '特性', en: 'Features' },
     'nav.platforms': { zh: '平台', en: 'Platforms' },
@@ -526,7 +531,7 @@
     'platforms.formats': { zh: 'downloads.dmg / .zip / .exe / .AppImage / .deb', en: 'downloads.dmg / .zip / .exe / .AppImage / .deb' },
 
     'preview.url': { zh: 'dsh web · 开发工作台', en: 'dsh web · Dev Workbench' },
-    'preview.pill': { zh: 'dsh 0.1.0', en: 'dsh 0.1.0' },
+    'preview.pill': { zh: 'dsh 0.1.0-rc.7', en: 'dsh 0.1.0-rc.7' },
     'preview.bar': { zh: 'DeepSeek Harness 开发环境', en: 'DeepSeek Harness Dev Environment' },
     'preview.sb.chat': { zh: '对话', en: 'Chat' },
     'preview.sb.workspace': { zh: '工作区', en: 'Workspace' },
@@ -552,6 +557,8 @@
     'features.f3.d': { zh: 'macOS 使用原生 hiddenInset 无边框（保留红黄绿按钮，页面延伸至顶部）；Windows / Linux 使用系统标题栏。', en: 'macOS uses the native hiddenInset frameless style (traffic lights kept, page extends to the top); Windows / Linux use the system title bar.' },
     'features.f4.t': { zh: '三平台自动打包', en: 'Three-Platform Auto-Build' },
     'features.f4.d': { zh: '基于 Tauri 与 GitHub Actions 矩阵构建，一条命令为 macOS、Windows、Linux 并行产出安装包。', en: 'Built on Tauri with a GitHub Actions matrix — one command produces installers for macOS, Windows, and Linux in parallel.' },
+    'features.f5.t': { zh: '复用本机引擎', en: 'Reuse an Existing Engine' },
+    'features.f5.d': { zh: '已有 dsh 直接复用，不重复安装：优先全局 npm，其次本应用 runtime，最后 npx；「版本」面板一键在文件管理器中打开安装位置。', en: 'Reuse an existing dsh instead of reinstalling — preferring a global npm install, then this app’s runtime, then npx. The Version panel reveals its install location in your file manager with one click.' },
 
     'platforms.title': { zh: '一处开发，全平台交付', en: 'Build Once, Ship Everywhere' },
     'platforms.sub': { zh: 'CI 自动为四个目标并行打包，产物直接上传到 GitHub Releases。', en: 'CI packages the targets in parallel and uploads artifacts straight to GitHub Releases.' },

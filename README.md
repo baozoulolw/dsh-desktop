@@ -26,6 +26,7 @@ DeepSeek Harness(`dsh` web)的 **Tauri 桌面封装**。将 `@deepseek-ai/dsh` �
 - **内嵌 dsh**:启动时自动拉起 `dsh web` 子进程,页面上方以 `<iframe>` 嵌入其 Web 界面,操作体验与原生应用一致。
 - **无边框窗口**:macOS 使用原生 `Overlay` 无边框(保留红黄绿按钮,页面延伸至顶部),Windows/Linux 使用系统标题栏。
 - **版本管理与一键升级**:启动时自动检测 dsh 最新版,发现新版即显示升级按钮;升级面板展示应用/Tauri/dsh 三方版本,支持一键升级并自动重启。
+- **复用已有引擎 / 快速定位**:本机已装有 dsh 时直接复用,不重复安装——优先全局 npm 安装,其次本应用私有 runtime,最后回退 npx(本机常用 `npx @deepseek-ai/dsh`);「版本」面板还能一键在文件管理器(Finder)中打开引擎安装位置。
 - **三平台打包**:基于 Tauri 打包,支持 macOS(dmg)、Windows(nsis/msi)、Linux(AppImage/deb),并配好 GitHub Actions 矩阵构建。
 
 ### 🚀 快速开始
@@ -80,9 +81,9 @@ pnpm build:mac      # 打包 macOS(arm64)
 
 ### 🛠 技术实现要点
 
-- **dsh 引擎按用户目录安装**:dsh 不再随应用打包,而是装在每用户 runtime 目录(`app_data_dir/dsh-runtime`),首次启动用系统 npm 安装默认版本,升级就在该目录 `npm install` 新版本。
+- **引擎来源优先复用**:dsh 不随应用打包。启动时按「全局 npm 安装 > 本应用私有 runtime(`app_data_dir/dsh-runtime`)> npx 兜底」选择本机已装的一份直接复用,避免重复安装;未装时才提示安装(用系统 npm 装默认版本)。
 - **系统 Node 运行 dsh**:dsh 的原生模块(`node-pty` / `koffi`)按本机 Node 编译,必须用系统 node 而非内置运行时,否则 ABI 不匹配,故通过 `npm_node_execpath` / `NODE` 等环境变量解析系统 Node 来启动子进程。
-- **子进程生命周期**:Rust 后端负责拉起 `dsh web`、解析其打印的 `http://<ip>:<port>` 地址并通过 `invoke` 返回前端设置 `iframe`;应用退出时自动终止子进程。
+- **跨会话实例复用**:Rust 后端拉起 `dsh web`、解析其打印的 `http://<ip>:<port>` 地址并通过 `invoke` 返回前端设置 `iframe`;启动成功写入 `dsh-live.json`(pid+url),应用退出不再杀 dsh,下次启动探测到实例仍在就**直接复用**而非重复拉起。
 - **版本升级**:前端 `invoke('upgrade_dsh')` 在 runtime 目录执行 `npm install @deepseek-ai/dsh@<version>`,通过 `upgrade-progress` 事件流式回传进度,完成后自动重启 dsh。
 - **安全**:采用 Tauri capabilities 权限模型,前端仅能调用显式注册的命令;外部链接一律交给系统浏览器打开。
 
@@ -108,6 +109,7 @@ The website hosts installers for macOS / Windows / Linux along with the latest v
 - **Embedded dsh**: Automatically launches the `dsh web` subprocess and embeds its web UI via an `<iframe>` at the top of the page, giving a native app feel.
 - **Frameless window**: macOS uses the native `Overlay` frameless style (keeping the traffic-light buttons, with the page extending to the top); Windows/Linux use the system title bar.
 - **Version management & one-click upgrade**: Detects the latest dsh version on startup and shows an upgrade button when a new version is found. The upgrade panel shows the app/Tauri/dsh versions and supports one-click upgrade with auto-restart.
+- **Reuse an existing engine / quick locate**: If a dsh engine already exists, reuse it instead of reinstalling — preferring a global npm install, then this app's private runtime, then an `npx` fallback (your `npx @deepseek-ai/dsh` workflow). The "Version" panel also offers a one-click button to reveal the engine's install location in your file manager (Finder).
 - **Three-platform packaging**: Built with Tauri for macOS (dmg), Windows (nsis/msi), and Linux (AppImage/deb), with a GitHub Actions matrix build preconfigured.
 
 ### 🚀 Quick Start
@@ -162,9 +164,9 @@ The repo includes `.github/workflows/build.yml`, which builds and uploads artifa
 
 ### 🛠 Implementation Notes
 
-- **dsh engine installed per-user**: dsh is not bundled with the app; it is installed into each user's runtime directory (`app_data_dir/dsh-runtime`). The default version is installed via the system npm on first launch; upgrades run `npm install` of the new version in that directory.
+- **Engine sourcing prefers reuse**: dsh is not bundled with the app. On startup the app picks an already-installed copy — global npm install > this app's private runtime (`app_data_dir/dsh-runtime`) > an `npx` fallback — and reuses it instead of reinstalling. It only prompts to install (via the system npm) when none is present.
 - **dsh runs on the system Node**: dsh's native modules (`node-pty` / `koffi`) are compiled against the local Node, so system Node must be used instead of a bundled runtime, or the ABI will mismatch. The system Node is resolved via env vars such as `npm_node_execpath` / `NODE` to launch the subprocess.
-- **Subprocess lifecycle**: The Rust backend launches `dsh web`, parses the printed `http://<ip>:<port>` address, and returns it via `invoke` so the frontend sets the `iframe`; the subprocess is terminated automatically on app exit.
+- **Cross-session instance reuse**: The Rust backend launches `dsh web`, parses the printed `http://<ip>:<port>` address, and returns it via `invoke` so the frontend sets the `iframe`. On a successful start it writes `dsh-live.json` (pid + url); the app no longer kills dsh on exit, so a running instance is **reused** (not relaunched) on the next start when it's still alive.
 - **Version upgrade**: The frontend `invoke('upgrade_dsh')` runs `npm install @deepseek-ai/dsh@<version>` in the runtime directory, streams progress back via the `upgrade-progress` event, then auto-restarts dsh.
 - **Security**: Uses the Tauri capabilities permission model so the frontend can only call explicitly registered commands; external links are opened by the system browser.
 
