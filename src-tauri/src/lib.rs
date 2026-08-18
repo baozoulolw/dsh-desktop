@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use tauri::Manager;
 use tauri::State;
@@ -156,14 +156,196 @@ fn path_with_node(node: &str, npm: &str) -> String {
     path
 }
 
-/// 读 runtime 目录里已安装的 dsh 版本,未装则返回"未知"。
-fn read_dsh_version(runtime: &Path) -> String {
-    let pkg = runtime.join("node_modules").join("@deepseek-ai").join("dsh").join("package.json");
-    std::fs::read_to_string(&pkg)
+// ---------- 复用本机已装的 dsh 引擎 ----------
+
+/// 引擎来源,用于面板展示与打开安装位置。
+#[derive(Serialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+#[derive(Debug)]
+enum EngineSource {
+    /// 全局 npm 安装(`npm i -g @deepseek-ai/dsh`),复用,不重复装。
+    Global,
+    /// 本应用私有 runtime 目录里的那一份。
+    App,
+    /// 经 npx 可用(`npx @deepseek-ai/dsh`,用户本机常用),没有其它已装引擎时兜底复用。
+    Npx,
+}
+
+/// 一个已定位到磁盘的 dsh 引擎。
+struct Engine {
+    /// 展示用的"安装位置"目录(面板/在 Finder 打开用)。
+    dir: PathBuf,
+    source: EngineSource,
+}
+
+impl Engine {
+    /// 实际入口 `lib/bin.js`。Npx 走 `npx` 命令,没有固定 bin。
+    fn bin(&self) -> PathBuf {
+        match self.source {
+            EngineSource::Global => self.dir.join("lib").join("bin.js"),
+            EngineSource::App => dsh_bin_path(&self.dir),
+            EngineSource::Npx => PathBuf::new(),
+        }
+    }
+
+    fn version(&self) -> String {
+        match self.source {
+            EngineSource::Global => read_pkg_version(&self.dir.join("package.json")),
+            EngineSource::App => read_pkg_version(
+                &self.dir.join("node_modules").join("@deepseek-ai").join("dsh").join("package.json"),
+            ),
+            // npx 引擎目录若直接带 package.json(找到真实缓存包)就读它,否则按启动所钉版本。
+            EngineSource::Npx => {
+                if self.dir.join("package.json").exists() {
+                    read_pkg_version(&self.dir.join("package.json"))
+                } else {
+                    DEFAULT_DSH_VERSION.to_string()
+                }
+            }
+        }
+    }
+}
+
+/// 读某个 package.json 的 version。
+fn read_pkg_version(pkg: &Path) -> String {
+    std::fs::read_to_string(pkg)
         .ok()
         .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
         .and_then(|v| v.get("version").and_then(|v| v.as_str()).map(String::from))
         .unwrap_or_else(|| "未知".to_string())
+}
+
+/// 由解析出的 node 绝对路径推出"全局 npm 安装"的 `@deepseek-ai/dsh` 目录。
+/// 路径模式与 node 安装方式一致:nvm `~/.nvm/.../vXX/lib/node_modules/@deepseek-ai/dsh`、
+/// Homebrew `/opt/homebrew/lib/node_modules/@deepseek-ai/dsh` 都是 node_dir 上两级的 lib/node_modules。
+fn resolve_global_dsh(node: &str) -> Option<PathBuf> {
+    let node_path = Path::new(node);
+    let pkg = node_path
+        .parent()?
+        .parent()?
+        .join("lib")
+        .join("node_modules")
+        .join("@deepseek-ai")
+        .join("dsh");
+    if pkg.join("lib").join("bin.js").exists() {
+        Some(pkg)
+    } else {
+        None
+    }
+}
+
+/// 取 node 同目录的 npx 可执行文件(npx 随 npm/node 一起分发)。
+fn resolve_npx(node: &str) -> String {
+    if let Some(dir) = Path::new(node).parent() {
+        let p = dir.join("npx");
+        if p.exists() {
+            return p.to_string_lossy().to_string();
+        }
+    }
+    "npx".to_string()
+}
+
+/// 本机曾用 `npx @deepseek-ai/dsh` 跑过时,包落在 `~/.npm/_npx/<hash>/node_modules/@deepseek-ai/dsh`。
+/// 找到真实缓存包目录则返回它;否则退回 `~/.npm/_npx` 根目录;再否则 None。
+fn resolve_npx_engine_dir(home: &std::path::Path) -> Option<PathBuf> {
+    let npx_root = home.join(".npm").join("_npx");
+    if let Ok(entries) = std::fs::read_dir(&npx_root) {
+        for e in entries.flatten() {
+            let pkg = e.path().join("node_modules").join("@deepseek-ai").join("dsh");
+            if pkg.join("package.json").exists() {
+                return Some(pkg);
+            }
+        }
+    }
+    if npx_root.exists() {
+        Some(npx_root)
+    } else {
+        None
+    }
+}
+
+/// 选择实际使用的引擎:优先全局 npm 安装,其次本应用私有 runtime,最后 npx 兜底。均无则 None。
+fn pick_engine(app: &tauri::AppHandle, node: &str) -> Option<Engine> {
+    if let Some(global) = resolve_global_dsh(node) {
+        let bin = global.join("lib").join("bin.js");
+        if bin.exists() {
+            return Some(Engine { dir: global, source: EngineSource::Global });
+        }
+    }
+    let runtime = runtime_dir(app).ok()?;
+    if dsh_bin_path(&runtime).exists() {
+        return Some(Engine { dir: runtime, source: EngineSource::App });
+    }
+    // npx 兜底:只有 node 同目录确实有 npx 才视为可用(避免误把 PATH 里的 npx 当准)。
+    let npx = resolve_npx(node);
+    if Path::new(&npx).exists() {
+        let home = std::env::var("HOME").unwrap_or_default();
+        let dir = resolve_npx_engine_dir(std::path::Path::new(&home)).unwrap_or_else(|| {
+            std::path::Path::new(&npx)
+                .parent()
+                .map(std::path::Path::to_path_buf)
+                .unwrap_or_else(|| std::path::PathBuf::from(home))
+        });
+        return Some(Engine { dir, source: EngineSource::Npx });
+    }
+    None
+}
+
+/// 当前应使用的引擎(node 解析失败时退化为仅看私有 runtime)。
+fn active_engine(app: &tauri::AppHandle) -> Option<Engine> {
+    resolve_node().ok().and_then(|n| pick_engine(app, &n))
+}
+
+// ---- 在跑实例的持久化与探活(dsh 用随机端口且不留状态文件,靠自记 {pid,url}) ----
+
+/// dsh-live.json 内容:最近一次由本应用启动且在跳出应用后仍存活的 web 实例。
+#[derive(Deserialize)]
+#[allow(dead_code)] // pid 暂只作记录,探活靠对 url 发请求
+struct LiveFile {
+    #[allow(dead_code)]
+    pid: u32,
+    url: String,
+}
+
+/// 应用数据目录下记录在跑 dsh 实例的文件。
+fn live_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let data = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("获取应用数据目录失败: {e}"))?;
+    Ok(data.join("dsh-live.json"))
+}
+
+/// 启动 dsh 成功后记录 pid + url(自动确保数据目录存在,避免首次 npx 模式下目录未创建而写失败)。
+fn persist_live(app: &tauri::AppHandle, pid: u32, url: &str) {
+    let Ok(data) = app.path().app_data_dir() else { return };
+    if std::fs::create_dir_all(&data).is_err() {
+        return;
+    }
+    let path = data.join("dsh-live.json");
+    let _ = std::fs::write(&path, serde_json::json!({ "pid": pid, "url": url }).to_string());
+}
+
+/// 探活已持久化的在跑实例:对记录的 url 做一次短超时 GET,G及时视为在跑返回 url,
+/// 否则删除陈旧文件返回 None。这是"复用已有实例、不重复拉"的关键。
+async fn resolve_running_url(app: &tauri::AppHandle) -> Option<String> {
+    let path = live_file(app).ok()?;
+    let raw = std::fs::read_to_string(&path).ok()?;
+    let rec: LiveFile = serde_json::from_str(&raw).ok()?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_millis(1500))
+        .build()
+        .ok()?;
+    let alive = match client.get(&rec.url).send().await {
+        Ok(resp) => resp.status().is_success() || resp.status().is_redirection(),
+        Err(_) => false,
+    };
+    if alive {
+        Some(rec.url)
+    } else {
+        let _ = std::fs::remove_file(&path);
+        None
+    }
 }
 
 /// 轻量语义化版本比较:a > b 返回 true,忽略 v/V 前缀,按 major.minor.patch 逐段比较。
@@ -192,37 +374,63 @@ fn dsh_bin_path(runtime: &Path) -> PathBuf {
     runtime.join("node_modules").join("@deepseek-ai").join("dsh").join("lib").join("bin.js")
 }
 
-/// 引擎是否已安装(runtime 目录里存在 bin.js)。
-fn dsh_installed(runtime: &Path) -> bool {
-    dsh_bin_path(runtime).exists()
-}
-
 /// 真正拉起 dsh 子进程并等其打印 URL。
-/// 阻塞至拿到 URL(由调用方负责包一层,避免卡 UI)。调用前需确保引擎已安装。
-async fn start_dsh_inner(app: &tauri::AppHandle, state: &State<'_, DshState>) -> Result<String, String> {
+/// 阻塞至拿到 URL(由调用方负责包一层,避免卡 UI)。调用前需确保引擎已可用。
+async fn start_dsh_inner(
+    app: &tauri::AppHandle,
+    state: &State<'_, DshState>,
+    engine: &Engine,
+) -> Result<String, String> {
     // 先终止可能残留的旧进程
     if let Some(mut old) = state.child.lock().unwrap().take() {
         let _ = old.kill();
     }
-    let runtime = runtime_dir(app)?;
     let node = resolve_node()?;
-    let dsh_bin = dsh_bin_path(&runtime);
-    if !dsh_bin.exists() {
-        return Err("dsh 未安装".to_string());
+    let npx = resolve_npx(&node);
+    // 先拼出 (程序, 参数),再统一建 Command——避免在 match 分支里直接返回借用局部的 Command。
+    let (program, args): (String, Vec<String>) = match engine.source {
+        // 全局与本应用都用系统 node 直接跑 bin.js(原生模块按本机 node ABI 编译)。
+        EngineSource::Global | EngineSource::App => {
+            let bin = engine.bin();
+            if !bin.exists() {
+                return Err("dsh 未安装".to_string());
+            }
+            (
+                node.clone(),
+                vec![
+                    bin.to_string_lossy().into_owned(),
+                    "--profile".into(),
+                    "web".into(),
+                    "--port".into(),
+                    "0".into(),
+                ],
+            )
+        }
+        // npx 兜底:经 npx 解析运行。
+        EngineSource::Npx => (
+            npx.clone(),
+            vec![
+                "--yes".into(),
+                format!("@deepseek-ai/dsh@{DEFAULT_DSH_VERSION}"),
+                "--profile".into(),
+                "web".into(),
+                "--port".into(),
+                "0".into(),
+            ],
+        ),
+    };
+    let mut cmd = Command::new(&program);
+    cmd.args(&args);
+    // npx 是 `#!/usr/bin/env node` 脚本,需把 node 目录并入 PATH。
+    if matches!(engine.source, EngineSource::Npx) {
+        cmd.env("PATH", path_with_node(&program, &npx));
     }
-
-    let mut child = Command::new(&node)
-        .arg(&dsh_bin)
-        .arg("--profile")
-        .arg("web")
-        .arg("--port")
-        .arg("0")
-        .current_dir(workspace_home())
+    cmd.current_dir(workspace_home())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("启动 dsh 失败: {e}"))?;
+        .stderr(Stdio::piped());
+    let mut child = cmd.spawn().map_err(|e| format!("启动 dsh 失败: {e}"))?;
+    let pid = child.id();
 
     let re = Regex::new(URL_RE).unwrap();
     let (tx, rx) = mpsc::channel::<String>();
@@ -255,6 +463,8 @@ async fn start_dsh_inner(app: &tauri::AppHandle, state: &State<'_, DshState>) ->
     match rx.recv_timeout(Duration::from_millis(STARTUP_TIMEOUT_MS)) {
         Ok(url) => {
             *state.url.lock().unwrap() = Some(url.clone());
+            // 记录在跑实例(pid + url),供下次启动探活复用,若应用退出后仍存活则直接重连。
+            persist_live(app, pid, &url);
             Ok(url)
         }
         Err(_) => {
@@ -274,6 +484,10 @@ struct VersionInfo {
     engine_version: String,
     dsh_version: String,
     platform: String,
+    /// 引擎来源: "global"(全局 npm)/ "app"(本应用)/ "npx"(npx 兜底)/ "none"。
+    engine_source: String,
+    /// 引擎安装位置:全局/本应用时是目录路径;在跑实例时是它的 url;无引擎时为空。
+    engine_address: String,
 }
 
 #[derive(Serialize)]
@@ -307,15 +521,19 @@ enum DshStartup {
 }
 
 /// 前端启动时调用:确保引擎已就绪并拿到地址,返回 dsh web URL。
-/// 已有则直接返回缓存 URL;未安装则告知前端"需要先安装",由用户触发安装,不再自动装。
+/// 优先级:①复用已在跑实例→ ②本进程内已启动且在跑→ ③定位引擎(优先全局,否则私有 runtime)并启动。
+/// 未安装则告知前端"需要先安装",由用户触发安装,不再自动装。
 #[tauri::command]
 async fn get_dsh_url(app: tauri::AppHandle, state: State<'_, DshState>) -> Result<DshStartup, String> {
     if !node_available() {
         return Ok(DshStartup::NodeMissing);
     }
-    if !dsh_installed(&runtime_dir(&app)?) {
-        return Ok(DshStartup::NotInstalled);
+    // ① 探活并复用跨会话仍在跑的实例(应用退出后 dsh 仍存活时,不再重拉)。
+    if let Some(url) = resolve_running_url(&app).await {
+        *state.url.lock().unwrap() = Some(url.clone());
+        return Ok(DshStartup::Ready { url });
     }
+    // ② 本进程内已启动过且在跑,直接返回缓存 URL。
     let running = {
         let mut g = state.child.lock().unwrap();
         match g.as_mut() {
@@ -328,27 +546,57 @@ async fn get_dsh_url(app: tauri::AppHandle, state: State<'_, DshState>) -> Resul
             return Ok(DshStartup::Ready { url: u });
         }
     }
-    match start_dsh_inner(&app, &state).await {
+    // ③ 定位引擎并启动一个 dsh web。
+    let node = match resolve_node() {
+        Ok(n) => n,
+        Err(e) => return Ok(DshStartup::StartupFailed { message: e }),
+    };
+    let engine = match pick_engine(&app, &node) {
+        Some(e) => e,
+        None => return Ok(DshStartup::NotInstalled),
+    };
+    match start_dsh_inner(&app, &state, &engine).await {
         Ok(url) => Ok(DshStartup::Ready { url }),
         Err(message) => Ok(DshStartup::StartupFailed { message }),
     }
 }
 
-#[tauri::command]
-async fn get_version_info(app: tauri::AppHandle) -> VersionInfo {
-    let runtime = runtime_dir(&app).unwrap_or_default();
+/// 组装版本信息:定位引擎,给出 dsh 版本、来源与安装位置(本机目录)。
+async fn build_version_info(app: &tauri::AppHandle) -> VersionInfo {
+    let engine = active_engine(app);
+    let (source, address, ver) = match &engine {
+        Some(e) => {
+            let source = match e.source {
+                EngineSource::Global => "global",
+                EngineSource::App => "app",
+                EngineSource::Npx => "npx",
+            };
+            (source.to_string(), e.dir.display().to_string(), e.version())
+        }
+        None => ("none".to_string(), String::new(), "未知".to_string()),
+    };
     VersionInfo {
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         engine_version: ENGINE_VERSION.to_string(),
-        dsh_version: read_dsh_version(&runtime),
+        dsh_version: ver,
         platform: std::env::consts::OS.to_string(),
+        engine_source: source,
+        engine_address: address,
     }
+}
+
+#[tauri::command]
+async fn get_version_info(app: tauri::AppHandle) -> VersionInfo {
+    build_version_info(&app).await
 }
 
 /// 查 npmmirror registry 拿 dsh 最新版。
 #[tauri::command]
 async fn check_update(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
-    let current = read_dsh_version(&runtime_dir(&app).unwrap_or_default());
+    // 对"当前版本"的判断用实际使用的引擎(优先全局 npm),让升级状态贴合真实运行。
+    let current = active_engine(&app)
+        .map(|e| e.version())
+        .unwrap_or_else(|| "未知".to_string());
     let client = reqwest::Client::builder()
         .timeout(Duration::from_millis(HTTP_TIMEOUT_MS))
         .build()
@@ -450,6 +698,20 @@ async fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String>
         .map_err(|e| e.to_string())
 }
 
+/// "快捷跳转":打开本机安装位置 —— 在文件管理器(Finder / 资源管理器)中显示引擎目录,而非浏览器。
+/// 未安装时则跳到官方安装页。
+#[tauri::command]
+async fn reveal_engine(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(engine) = active_engine(&app) {
+        return app.opener()
+            .open_url(format!("file://{}", engine.dir.display()), None::<&str>)
+            .map_err(|e| e.to_string());
+    }
+    app.opener()
+        .open_url("https://www.npmjs.com/package/@deepseek-ai/dsh".to_string(), None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
 /// 升级 dsh 到指定版本:在 runtime 目录 npm install,流式回传进度,完成后重启 dsh。
 #[tauri::command]
 async fn upgrade_dsh(
@@ -500,17 +762,14 @@ async fn upgrade_dsh(
         return Err(format!("升级失败 (exit = {status})"));
     }
 
-    // 升级完成后重启 dsh
-    let url = start_dsh_inner(&app, &state).await?;
+    // 升级完成后重启 dsh(仍按 active 引擎重启,含全局/npx 兜底)。
+    let engine = active_engine(&app)
+        .unwrap_or_else(|| Engine { dir: runtime.clone(), source: EngineSource::App });
+    let url = start_dsh_inner(&app, &state, &engine).await?;
     let _ = app.emit("dsh-url-updated", url);
     let _ = app.emit("upgrade-progress", serde_json::json!({ "phase": "升级完成, dsh 已重启", "done": true }));
 
-    Ok(VersionInfo {
-        app_version: env!("CARGO_PKG_VERSION").to_string(),
-        engine_version: ENGINE_VERSION.to_string(),
-        dsh_version: read_dsh_version(&runtime),
-        platform: std::env::consts::OS.to_string(),
-    })
+    Ok(build_version_info(&app).await)
 }
 
 /// 手动安装 dsh 引擎:在 runtime 目录 npm install 默认版本,实时回传进度,完成后不重启,
@@ -566,12 +825,7 @@ async fn install_dsh(app: tauri::AppHandle) -> Result<VersionInfo, String> {
     }
 
     let _ = app.emit("install-progress", serde_json::json!({ "phase": "安装完成", "done": true }));
-    Ok(VersionInfo {
-        app_version: env!("CARGO_PKG_VERSION").to_string(),
-        engine_version: ENGINE_VERSION.to_string(),
-        dsh_version: read_dsh_version(&runtime),
-        platform: std::env::consts::OS.to_string(),
-    })
+    Ok(build_version_info(&app).await)
 }
 
 // ---------- 入口 ----------
@@ -586,19 +840,14 @@ pub fn run() {
             check_update,
             check_app_update,
             open_external,
+            reveal_engine,
             upgrade_dsh,
             install_dsh
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
-            // 退出时终止 dsh 子进程,避免残留
-            if let tauri::RunEvent::Exit = event {
-                if let Some(state) = app.try_state::<DshState>() {
-                    if let Some(mut c) = state.child.lock().unwrap().take() {
-                        let _ = c.kill();
-                    }
-                }
-            }
+        .run(|_app, _event| {
+            // 退出时不杀 dsh 子进程:让它继续作为本地 web 服务存活,下次启动经 dsh-live.json
+            // 探活复用,避免每次打开都拉一个新的、堆满孤儿进程。
         });
 }

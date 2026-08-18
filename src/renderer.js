@@ -106,6 +106,7 @@ async function refreshPanel() {
     $('pAppVer').textContent = info.app_version
     $('pEleVer').textContent = info.engine_version
     $('pCurVer').textContent = info.dsh_version
+    renderEngineInfo(info)
     const notInstalled = info.dsh_version === '未知'
 
     const { latest, is_outdated } = await invoke('check_update')
@@ -133,6 +134,42 @@ async function refreshPanel() {
     refreshBtn.textContent = '检查更新'
   }
 }
+
+// 渲染引擎来源 / 安装位置,并切换"打开"按钮的语义(在文件管理器里打开本机目录)。
+function renderEngineInfo(info) {
+  const src = $('pEngSource')
+  const addr = $('pEngAddress')
+  const btn = $('pEngineBtn')
+  const { engine_source: source, engine_address: address } = info
+  switch (source) {
+    case 'global':
+      src.textContent = '全局 npm'
+      addr.textContent = address
+      btn.textContent = '打开安装位置'
+      break
+    case 'app':
+      src.textContent = '本应用'
+      addr.textContent = address
+      btn.textContent = '打开安装位置'
+      break
+    case 'npx':
+      src.textContent = 'npx (本机)'
+      addr.textContent = address
+      btn.textContent = '打开安装位置'
+      break
+    case 'none':
+    default:
+      src.textContent = '未安装'
+      addr.textContent = ''
+      btn.textContent = '去安装 dsh'
+      break
+  }
+  btn.style.display = 'inline-flex'
+}
+// "快捷跳转":在文件管理器里显示引擎安装目录;未安装则去安装页,均由后端 decide。
+$('pEngineBtn').addEventListener('click', () => {
+  invoke('reveal_engine').catch(() => {})
+})
 
 $('pRefreshBtn').addEventListener('click', refreshPanel)
 
@@ -241,7 +278,7 @@ async function boot() {
       $('dshBadge').textContent = 'dsh 未安装'
       showBootError({
         title: 'dsh 引擎未安装',
-        message: '首次使用需要先安装 dsh 引擎(约几十 MB)。点击下方"安装引擎",安装进度会在窗口内实时显示,完成后自动启动。',
+        message: '首次使用需要先安装 dsh 引擎(约几十 MB)。点击下方"安装引擎",安装进度会在窗口内实时显示,完成后自动启动。\n· 也可以点右上角「版本」面板里的「去安装 dsh」跳到官方安装页。',
         offerEngine: true,
       })
     } else {
