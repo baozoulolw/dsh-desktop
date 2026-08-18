@@ -299,10 +299,9 @@ fn active_engine(app: &tauri::AppHandle) -> Option<Engine> {
 // ---- 在跑实例的持久化与探活(dsh 用随机端口且不留状态文件,靠自记 {pid,url}) ----
 
 /// dsh-live.json 内容:最近一次由本应用启动且在跳出应用后仍存活的 web 实例。
+/// 探活靠 url 发请求;pid 供"重启服务"终结跨会话孤儿实例用。
 #[derive(Deserialize)]
-#[allow(dead_code)] // pid 暂只作记录,探活靠对 url 发请求
 struct LiveFile {
-    #[allow(dead_code)]
     pid: u32,
     url: String,
 }
@@ -324,6 +323,17 @@ fn persist_live(app: &tauri::AppHandle, pid: u32, url: &str) {
     }
     let path = data.join("dsh-live.json");
     let _ = std::fs::write(&path, serde_json::json!({ "pid": pid, "url": url }).to_string());
+}
+
+/// 终止跨会话持久化的 live 实例:读 dsh-live.json 拿 pid 并 kill,随后删文件。
+/// 用于"重启服务"——把上一会话留下的孤儿 dsh 也一并结束,再拉起全新的。
+fn kill_live_instance(app: &tauri::AppHandle) {
+    let Ok(path) = live_file(app) else { return };
+    let raw = std::fs::read_to_string(&path).unwrap_or_default();
+    if let Ok(rec) = serde_json::from_str::<LiveFile>(&raw) {
+        let _ = Command::new("kill").arg(rec.pid.to_string()).status();
+    }
+    let _ = std::fs::remove_file(&path);
 }
 
 /// 探活已持久化的在跑实例:对记录的 url 做一次短超时 GET,G及时视为在跑返回 url,
@@ -828,6 +838,27 @@ async fn install_dsh(app: tauri::AppHandle) -> Result<VersionInfo, String> {
     Ok(build_version_info(&app).await)
 }
 
+/// 重启 dsh 服务:终止在跑实例(含跨会话持久化的孤儿实例)后重新拉起一个全新的。
+/// 与 get_dsh_url 不同:强制重启,不复用已有实例。
+#[tauri::command]
+async fn restart_dsh(app: tauri::AppHandle, state: State<'_, DshState>) -> Result<DshStartup, String> {
+    if let Some(mut c) = state.child.lock().unwrap().take() {
+        let _ = c.kill();
+    }
+    kill_live_instance(&app);
+    if !node_available() {
+        return Ok(DshStartup::NodeMissing);
+    }
+    let engine = match active_engine(&app) {
+        Some(e) => e,
+        None => return Ok(DshStartup::NotInstalled),
+    };
+    match start_dsh_inner(&app, &state, &engine).await {
+        Ok(url) => Ok(DshStartup::Ready { url }),
+        Err(message) => Ok(DshStartup::StartupFailed { message }),
+    }
+}
+
 // ---------- 入口 ----------
 
 pub fn run() {
@@ -842,7 +873,8 @@ pub fn run() {
             open_external,
             reveal_engine,
             upgrade_dsh,
-            install_dsh
+            install_dsh,
+            restart_dsh
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

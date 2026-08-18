@@ -94,6 +94,7 @@ async function refreshPanel() {
   const status = $('pStatus')
   const refreshBtn = $('pRefreshBtn')
   const upgradeBtn = $('pUpgradeBtn')
+  const restartBtn = $('pRestartBtn')
   // 应用自身更新状态独立刷新(不阻塞下方 dsh 检查)
   checkAppUpdate()
   // 进入 loading 状态
@@ -115,12 +116,14 @@ async function refreshPanel() {
       $('pLatestVer').textContent = '—'
       upgradeBtn.disabled = true
       upgradeBtn.textContent = '升级 dsh'
+      restartBtn.disabled = true
       status.className = 'status error'
       status.textContent = '引擎尚未安装,请先在主界面点击"安装引擎"。'
     } else {
       $('pLatestVer').textContent = latest
       upgradeBtn.disabled = !is_outdated
       upgradeBtn.textContent = is_outdated ? `升级到 ${latest}` : '升级 dsh'
+      restartBtn.disabled = false
       status.className = 'status success'
       status.textContent = is_outdated ? `发现新版本 ${latest},可升级。` : '已是最新版本。'
     }
@@ -187,6 +190,38 @@ $('pUpgradeBtn').addEventListener('click', async () => {
     prog.textContent += `\n[错误] ${err}`
     $('pUpgradeBtn').disabled = false
     $('pRefreshBtn').disabled = false
+  }
+})
+
+// 重启 dsh 服务:强制终止当前实例(含跨会话孤儿)并重新拉起,更新 iframe 指向。
+$('pRestartBtn').addEventListener('click', async () => {
+  const btn = $('pRestartBtn')
+  const status = $('pStatus')
+  btn.disabled = true
+  status.className = 'status loading'
+  status.textContent = '正在重启 dsh 服务…'
+  try {
+    const res = await invoke('restart_dsh')
+    if (res.status === 'ready') {
+      if (iframe.getAttribute('src') !== res.url) iframe.src = res.url
+      refreshBadge()
+      status.className = 'status success'
+      status.textContent = '服务已重启。'
+    } else if (res.status === 'node_missing') {
+      status.className = 'status error'
+      status.textContent = '未检测到 Node.js,无法重启服务。'
+    } else if (res.status === 'not_installed') {
+      status.className = 'status error'
+      status.textContent = '引擎尚未安装,请先安装。'
+    } else {
+      status.className = 'status error'
+      status.textContent = `重启失败:${res.message || '未知错误'}`
+    }
+  } catch (err) {
+    status.className = 'status error'
+    status.textContent = `重启失败:${err}`
+  } finally {
+    btn.disabled = false
   }
 })
 
