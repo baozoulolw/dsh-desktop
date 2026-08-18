@@ -327,6 +327,8 @@ fn persist_live(app: &tauri::AppHandle, pid: u32, url: &str) {
 
 /// 终止跨会话持久化的 live 实例:读 dsh-live.json 拿 pid 并 kill,随后删文件。
 /// 用于"重启服务"——把上一会话留下的孤儿 dsh 也一并结束,再拉起全新的。
+/// 注意:dsh-live.json 只记录最近一次实例的 pid,且 npx 模式下它是 npx 的包装进程 pid,
+/// 而非真实 `node .../.bin/dsh` 服务器——所以光靠它杀不干净,restart 还必须调用 kill_all_dsh。
 fn kill_live_instance(app: &tauri::AppHandle) {
     let Ok(path) = live_file(app) else { return };
     let raw = std::fs::read_to_string(&path).unwrap_or_default();
@@ -335,6 +337,55 @@ fn kill_live_instance(app: &tauri::AppHandle) {
     }
     let _ = std::fs::remove_file(&path);
 }
+
+/// 终止所有在跑的 dsh web 服务器进程(含历史会话遗留的孤儿、npx 间接启动的真实 node 进程)。
+///
+/// 为什么必须"全杀":dsh 的 task-board ledger 是单所有权锁(`~/.dsh/task-board/ledger-v2.lock`),
+/// 只要有一个残留 dsh 占着它,新起的实例就会在插件加载时报
+/// `task-board ledger is already owned by process <pid>` 并退出,stdout 永远打不出
+/// `dsh web: http://...`,于是 restart 只能卡到 30s 超时。掉单 pid 永远清不掉这种孤儿,
+/// 所以 restart 用这里按命令行(而非 pid)把匹配的 dsh 都结束。
+///
+/// 双模式匹配:
+///   - npx/兜底: `node .../node_modules/.bin/dsh --profile web --port 0`(记在 live 里的其实是 npx 包装 pid)
+///   - 全局/本应用: `node .../@deepseek-ai/dsh/lib/bin.js --profile web --port 0`
+fn kill_all_dsh() {
+    #[cfg(unix)]
+    {
+        let _ = Command::new("pkill").args(["-f", r"\.bin/dsh --profile web"]).status();
+        let _ = Command::new("pkill").args(["-f", r"lib/bin\.js --profile web"]).status();
+    }
+    // Windows 无 pkill;直接子进程与记录 pid 已被 restart 另行 kill,这里先不强杀全部 node(会误伤)。
+    #[cfg(windows)]
+    {
+        // TODO(windows): 若要根治 ledger 单所有权锁下的孤儿,需枚举命令行含 --profile web 的 node 进程再逐一 taskkill。
+    }
+}
+
+/// 在清理旧进程完成后,轮询等待所有 `--profile web` 的 dsh 进程真正退出。
+/// 目的:等占着 task-board ledger 锁的旧进程释放锁,避免新实例启动时仍撞上
+/// `ledger is already owned by <旧pid>` 而插件加载失败。
+#[cfg(unix)]
+fn wait_dsh_terminated() {
+    let deadline = std::time::Instant::now() + Duration::from_secs(6);
+    while std::time::Instant::now() < deadline {
+        let a = Command::new("pgrep")
+            .args(["-f", r"\.bin/dsh --profile web"])
+            .output();
+        let b = Command::new("pgrep")
+            .args(["-f", r"lib/bin\.js --profile web"])
+            .output();
+        let any = a.map(|o| !o.stdout.is_empty()).unwrap_or(false)
+            || b.map(|o| !o.stdout.is_empty()).unwrap_or(false);
+        if !any {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
+#[cfg(not(unix))]
+fn wait_dsh_terminated() {}
 
 /// 探活已持久化的在跑实例:对记录的 url 做一次短超时 GET,G及时视为在跑返回 url,
 /// 否则删除陈旧文件返回 None。这是"复用已有实例、不重复拉"的关键。
@@ -395,6 +446,10 @@ async fn start_dsh_inner(
     if let Some(mut old) = state.child.lock().unwrap().take() {
         let _ = old.kill();
     }
+    // 再清掉所有残留 dsh 服务器并等它们真正退出(见 kill_all_dsh:task-board ledger 单所有权锁,
+    // 留一个就会让新实例加载插件失败 → 启动超时)。这里统一收口,无论哪条启动路径都先洗干净。
+    kill_all_dsh();
+    wait_dsh_terminated();
     let node = resolve_node()?;
     let npx = resolve_npx(&node);
     // 先拼出 (程序, 参数),再统一建 Command——避免在 match 分支里直接返回借用局部的 Command。
@@ -842,6 +897,7 @@ async fn install_dsh(app: tauri::AppHandle) -> Result<VersionInfo, String> {
 /// 与 get_dsh_url 不同:强制重启,不复用已有实例。
 #[tauri::command]
 async fn restart_dsh(app: tauri::AppHandle, state: State<'_, DshState>) -> Result<DshStartup, String> {
+    // 先杀掉当前会话直管子进程、并移除 dsh-live.json(旧实例的 pid/url 不再有效)。
     if let Some(mut c) = state.child.lock().unwrap().take() {
         let _ = c.kill();
     }
