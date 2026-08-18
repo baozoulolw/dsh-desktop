@@ -66,13 +66,6 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
-      # tauri-action 默认把 release 建为草稿,打 tag 时把所有平台产物上传完后转正式。
-      - name: Publish release (转正式)
-        if: startsWith(github.ref, 'refs/tags/')
-        run: gh release edit "$GITHUB_REF_NAME" --draft=false
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -85,3 +78,18 @@ jobs:
             src-tauri/target/release/bundle/**/*.AppImage
             src-tauri/target/release/bundle/**/*.deb
           if-no-files-found: warn
+
+  # 矩阵内三个平台并行上传产物到同一 draft release;转正式若留在矩阵里会三路竞态
+  # (先到者转正,其余 `gh release edit` 报 release not found)。提到独立 job,等所有平台
+  # 上传完成后只跑一次。
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - name: Publish release (转正式)
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
