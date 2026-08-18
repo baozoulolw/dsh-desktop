@@ -89,7 +89,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      # 必须有 checkout + 显式 --repo:gh release edit 解析目标仓库会回退到 git remote,
+      # 而 publish 是独立 job、默认没有 .git,会导致 "failed to run git: not a git repository"。
+      - uses: actions/checkout@v4
       - name: Publish release (转正式)
-        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
