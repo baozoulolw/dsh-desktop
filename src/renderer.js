@@ -160,6 +160,10 @@ listen('upgrade-progress', ({ payload }) => {
   if (payload.done) {
     $('pUpgradeBtn').disabled = true
     $('pRefreshBtn').disabled = false
+    // 升级完成后刷新左上角版本徽章,并重新检查以隐藏标题栏红
+    // 色"升级到 X"按钮(boot() 不会在升级后调用,两者都要手动补)。
+    refreshBadge()
+    autoCheckUpdate()
   }
 })
 
