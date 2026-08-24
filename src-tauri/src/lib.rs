@@ -179,12 +179,12 @@ struct Engine {
 }
 
 impl Engine {
-    /// 实际入口 `lib/bin.js`。Npx 走 `npx` 命令,没有固定 bin。
+    /// 实际入口 `lib/bin.js`。Npx 走缓存里那份真实包;无缓存包时为空,由调用方退回 npx 命令兜底。
     fn bin(&self) -> PathBuf {
         match self.source {
             EngineSource::Global => self.dir.join("lib").join("bin.js"),
             EngineSource::App => dsh_bin_path(&self.dir),
-            EngineSource::Npx => PathBuf::new(),
+            EngineSource::Npx => self.dir.join("lib").join("bin.js"),
         }
     }
 
@@ -471,18 +471,37 @@ async fn start_dsh_inner(
                 ],
             )
         }
-        // npx 兜底:经 npx 解析运行。
-        EngineSource::Npx => (
-            npx.clone(),
-            vec![
-                "--yes".into(),
-                format!("@deepseek-ai/dsh@{DEFAULT_DSH_VERSION}"),
-                "--profile".into(),
-                "web".into(),
-                "--port".into(),
-                "0".into(),
-            ],
-        ),
+        // npx 兜底:优先直接跑 npx 缓存里那份真实包(<hash>/node_modules/@deepseek-ai/dsh/lib/bin.js),
+        // 让它与"升级/复用的是同一份"严格一致(而非钉死 DEFAULT_DSH_VERSION 常量,那样升级永不生效)。
+        // 与全局/本应用一样用系统 node 跑,原生模块按本机 node ABI 编译。缓存里没有真实包时
+        // 再退回 `npx --yes @deepseek-ai/dsh@{DEFAULT}` 临时拉一份。
+        EngineSource::Npx => {
+            let bin = engine.bin();
+            if bin.exists() {
+                (
+                    node.clone(),
+                    vec![
+                        bin.to_string_lossy().into_owned(),
+                        "--profile".into(),
+                        "web".into(),
+                        "--port".into(),
+                        "0".into(),
+                    ],
+                )
+            } else {
+                (
+                    npx.clone(),
+                    vec![
+                        "--yes".into(),
+                        format!("@deepseek-ai/dsh@{DEFAULT_DSH_VERSION}"),
+                        "--profile".into(),
+                        "web".into(),
+                        "--port".into(),
+                        "0".into(),
+                    ],
+                )
+            }
+        }
     };
     let mut cmd = Command::new(&program);
     cmd.args(&args);
@@ -777,7 +796,8 @@ async fn reveal_engine(app: tauri::AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-/// 升级 dsh 到指定版本:在 runtime 目录 npm install,流式回传进度,完成后重启 dsh。
+/// 升级 dsh 到指定版本:按"在用的引擎来源"就地安装(全局 npm i -g / 本应用 runtime /
+/// npx 缓存),流式回传进度,完成后重启 dsh。
 #[tauri::command]
 async fn upgrade_dsh(
     app: tauri::AppHandle,
@@ -787,25 +807,51 @@ async fn upgrade_dsh(
     if let Some(mut c) = state.child.lock().unwrap().take() {
         let _ = c.kill();
     }
-    let runtime = runtime_dir(&app)?;
     let node = resolve_node()?;
     let npm = resolve_npm(&node);
 
+    // 升级"在用的那份":按实际引擎来源决定装到哪,而非一律塞进本应用私有 runtime。
+    // 来源顺位见 pick_engine:全局 > 本应用私有 runtime > npx。
+    //   全局 → npm i -g(原位升级全局安装的那份,保持"在用的就是升级后的")。
+    //   本应用 → 装进私有 runtime(--prefix)。
+    //   npx   → 刷新 ~/.npm/_npx/<hash> 缓存里那份(终端 npx @deepseek-ai/dsh 即用它)。
+    //   无引擎(首次)/其它 → 默认落到本应用 runtime。
+    let engine = active_engine(&app);
+    let source = engine.as_ref().map(|e| e.source.clone());
+    let runtime = runtime_dir(&app)?;
+
     let _ = app.emit("upgrade-progress", serde_json::json!({ "phase": "开始升级…", "done": false }));
 
-    let mut cmd = Command::new(&npm)
-        .env("PATH", path_with_node(&node, &npm))
-        .arg("install")
-        .arg("--prefix")
-        .arg(&runtime)
-        .arg(format!("@deepseek-ai/dsh@{target_version}"))
+    let mut cmd = Command::new(&npm);
+    cmd.env("PATH", path_with_node(&node, &npm)).arg("install");
+    match source {
+        Some(EngineSource::Global) => {
+            cmd.current_dir(workspace_home()).arg("-g");
+        }
+        // engine.dir 是 <hash>/node_modules/@deepseek-ai/dsh;往上三级即 <hash> 缓存根。
+        // current_dir / --prefix 目标目录都须先存在,否则 spawn 报 ENOENT。
+        Some(EngineSource::Npx) => {
+            let base = engine.as_ref().map(|e| e.dir.clone()).unwrap_or_else(|| runtime.clone());
+            let cache_root = base
+                .parent()
+                .and_then(|a| a.parent())
+                .and_then(|b| b.parent())
+                .map(|c| c.to_path_buf())
+                .unwrap_or_else(|| runtime.clone());
+            std::fs::create_dir_all(&cache_root).map_err(|e| format!("创建缓存目录失败: {e}"))?;
+            cmd.current_dir(&cache_root).arg("--prefix").arg(&cache_root);
+        }
+        _ => {
+            std::fs::create_dir_all(&runtime).map_err(|e| format!("创建 runtime 目录失败: {e}"))?;
+            cmd.current_dir(&runtime).arg("--prefix").arg(&runtime);
+        }
+    }
+    cmd.arg(format!("@deepseek-ai/dsh@{target_version}"))
         .arg("--loglevel=info") // 非终端下默认只打警告;降到 info 让下载/安装过程可见
-        .current_dir(&runtime)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("启动 npm install 失败: {e}"))?;
+        .stderr(Stdio::piped());
+    let mut cmd = cmd.spawn().map_err(|e| format!("启动 npm install 失败: {e}"))?;
 
     let out = cmd.stdout.take().ok_or("无法读取 npm stdout")?;
     let err = cmd.stderr.take().ok_or("无法读取 npm stderr")?;
